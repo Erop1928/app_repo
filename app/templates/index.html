@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="header-actions">
+        <a href="{{ url_for('main.new_application') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Добавить приложение
+        </a>
+    </div>
+
+    <div class="applications-grid">
+        {% for app in applications %}
+        <div class="app-card">
+            <div class="app-header">
+                <h2 class="app-name">{{ app.name }}</h2>
+                <span class="package-name">{{ app.package_name }}</span>
+            </div>
+
+            {% if app.description %}
+            <div class="app-description">
+                {{ app.description }}
+            </div>
+            {% endif %}
+
+            {% set latest_release = app.get_latest_release() %}
+            {% if latest_release %}
+            <div class="latest-version">
+                <div class="version-info">
+                    <span class="version-number">
+                        <i class="fas fa-code-branch"></i>
+                        {{ latest_release.version_number }}
+                    </span>
+                    <span class="upload-date">
+                        <i class="far fa-calendar-alt"></i>
+                        {{ latest_release.upload_date.strftime('%d.%m.%Y') }}
+                    </span>
+                </div>
+                {% if latest_release.changelog %}
+                <div class="version-changelog">
+                    <pre class="changelog-preview">{{ latest_release.changelog[:200] }}{% if latest_release.changelog|length > 200 %}...{% endif %}</pre>
+                </div>
+                {% endif %}
+                <div class="version-actions">
+                    <a href="{{ url_for('main.download_version', id=latest_release.id) }}" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Скачать
+                    </a>
+                    <span class="downloads-count">
+                        <i class="fas fa-download"></i> {{ latest_release.downloads }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="app-footer">
+                <div class="app-meta">
+                    <span class="category-tag">
+                        <i class="fas fa-tag"></i>
+                        {{ app.category.name }}
+                    </span>
+                    <span class="versions-count">
+                        <i class="fas fa-history"></i>
+                        {{ app.versions|length }} версий
+                    </span>
+                </div>
+                <a href="{{ url_for('main.application_details', id=app.id) }}" class="btn btn-secondary">
+                    <i class="fas fa-info-circle"></i> Подробнее
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.applications-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+
+.app-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.app-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.app-name {
+    margin: 0;
+    font-size: 1.4em;
+    color: var(--text-color);
+}
+
+.package-name {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.app-description {
+    color: var(--text-color);
+    font-size: 0.95em;
+    line-height: 1.4;
+}
+
+.latest-version {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.version-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.version-number {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.upload-date {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-changelog {
+    margin: 10px 0;
+    max-height: 100px;
+    overflow: hidden;
+}
+
+.changelog-preview {
+    margin: 0;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    color: var(--text-muted);
+}
+
+.version-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.downloads-count {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.app-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.app-meta {
+    display: flex;
+    gap: 15px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.header-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 20px 0;
+}
+
+@media (max-width: 768px) {
+    .applications-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .app-footer {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .app-meta {
+        justify-content: space-between;
+    }
+}
+</style>
+{% endblock %} 

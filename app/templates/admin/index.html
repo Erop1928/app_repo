@@ -1,0 +1,99 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<div class="admin-header">
+    <h1>Панель управления</h1>
+</div>
+
+<div class="admin-dashboard">
+    <div class="dashboard-card">
+        <div class="card-icon">
+            <i class="fas fa-users"></i>
+        </div>
+        <div class="card-content">
+            <h3>Пользователи</h3>
+            <p class="card-value">{{ users_count }}</p>
+        </div>
+        <a href="{{ url_for('admin.users_list') }}" class="card-link">
+            Управление пользователями <i class="fas fa-arrow-right"></i>
+        </a>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-icon">
+            <i class="fas fa-user-tag"></i>
+        </div>
+        <div class="card-content">
+            <h3>Роли</h3>
+            <p class="card-value">{{ roles_count }}</p>
+        </div>
+        <a href="{{ url_for('admin.roles_list') }}" class="card-link">
+            Управление ролями <i class="fas fa-arrow-right"></i>
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.admin-header {
+    margin-bottom: 30px;
+}
+
+.admin-header h1 {
+    margin: 0;
+    font-size: 2em;
+    color: var(--text-color);
+}
+
+.admin-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.card-icon {
+    font-size: 2em;
+    color: var(--primary-color);
+}
+
+.card-content h3 {
+    margin: 0;
+    font-size: 1.2em;
+    color: var(--text-color);
+}
+
+.card-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin: 5px 0;
+}
+
+.card-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+    transition: color 0.3s;
+}
+
+.card-link:hover {
+    color: var(--primary-color);
+}
+</style>
+{% endblock %} 

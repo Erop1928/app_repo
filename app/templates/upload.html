@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Загрузка APK файлов</h1>
+    
+    <div class="upload-container" id="dropZone">
+        <div class="upload-message">
+            Перетащите APK файлы сюда или нажмите для выбора
+            <i class="fas fa-cloud-upload-alt"></i>
+        </div>
+        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+            {{ form.hidden_tag() }}
+            <div class="file-input-container">
+                {{ form.apk_files(class="file-input", multiple=true) }}
+            </div>
+            
+            <div id="fileList" class="file-list"></div>
+            
+            <div class="form-group">
+                {{ form.category_id.label }}
+                {{ form.category_id(class="form-control") }}
+            </div>
+            
+            <div id="batchEditContainer"></div>
+            
+            {{ form.submit(class="btn") }}
+        </form>
+    </div>
+</div>
+
+<!-- Шаблон для формы редактирования файла -->
+<template id="fileEditTemplate">
+    <div class="file-edit-form">
+        <h3 class="filename"></h3>
+        <div class="form-group">
+            <label>Версия:</label>
+            <input type="text" name="version[]" class="form-control">
+        </div>
+        <div class="form-group">
+            <label>Описание:</label>
+            <textarea name="description[]" class="form-control"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Список изменений:</label>
+            <textarea name="changelog[]" class="form-control"></textarea>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<style>
+    .upload-container {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        transition: border 0.3s ease;
+    }
+
+    .upload-container.dragover {
+        border-color: #4CAF50;
+        background-color: rgba(76, 175, 80, 0.1);
+    }
+
+    .upload-message {
+        font-size: 1.2em;
+        color: #666;
+        margin: 20px 0;
+    }
+
+    .file-input-container {
+        position: relative;
+        margin: 20px 0;
+    }
+
+    .file-input {
+        opacity: 0;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+    }
+
+    .file-list {
+        margin: 20px 0;
+    }
+
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid #ddd;
+        margin: 5px 0;
+        border-radius: 4px;
+    }
+
+    .file-name {
+        flex-grow: 1;
+    }
+
+    .file-size {
+        margin: 0 10px;
+        color: #666;
+    }
+
+    .remove-file {
+        color: #f44336;
+        cursor: pointer;
+    }
+
+    .file-edit-form {
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+
+    .form-group {
+        margin: 15px 0;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.querySelector('.file-input');
+    const fileList = document.getElementById('fileList');
+    const batchEditContainer = document.getElementById('batchEditContainer');
+    const template = document.getElementById('fileEditTemplate');
+    const form = document.getElementById('uploadForm');
+    
+    // Drag and Drop обработчики
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const droppedFiles = Array.from(e.dataTransfer.files).filter(file => 
+            file.name.toLowerCase().endsWith('.apk')
+        );
+        handleFiles(droppedFiles);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        const selectedFiles = Array.from(e.target.files).filter(file => 
+            file.name.toLowerCase().endsWith('.apk')
+        );
+        handleFiles(selectedFiles);
+    });
+
+    function handleFiles(files) {
+        console.log('Handling files:', files);
+        
+        // Очищаем текущий список файлов
+        fileList.innerHTML = '';
+        batchEditContainer.innerHTML = '';
+        
+        // Удаляем старые скрытые input[type="file"]
+        document.querySelectorAll('input[name="apk_files"]').forEach(el => el.remove());
+        
+        Array.from(files).forEach((file, index) => {
+            if (file.name.toLowerCase().endsWith('.apk')) {
+                console.log('Processing file:', file.name);
+                
+                // Создаем уникальный идентификатор для файла
+                const fileId = Date.now() + '_' + index;
+                
+                // Добавляем файл в список
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.dataset.fileId = fileId;
+                fileItem.innerHTML = `
+                    <span class="file-name">${file.name}</span>
+                    <span class="file-size">${formatFileSize(file.size)}</span>
+                    <span class="remove-file" data-file-id="${fileId}">
+                        <i class="fas fa-times"></i>
+                    </span>
+                `;
+                fileList.appendChild(fileItem);
+
+                // Создаем форму редактирования для файла
+                const editForm = template.content.cloneNode(true);
+                const editFormDiv = editForm.querySelector('.file-edit-form');
+                editFormDiv.dataset.fileId = fileId;
+                editForm.querySelector('.filename').textContent = file.name;
+                batchEditContainer.appendChild(editForm);
+
+                // Создаем скрытый input для файла
+                const fileField = document.createElement('input');
+                fileField.type = 'file';
+                fileField.name = 'apk_files';
+                fileField.style.display = 'none';
+                fileField.dataset.fileId = fileId;
+
+                // Создаем новый FileList с одним файлом
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileField.files = dataTransfer.files;
+
+                form.appendChild(fileField);
+            }
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Обработка удаления файлов
+    fileList.addEventListener('click', (e) => {
+        const removeButton = e.target.closest('.remove-file');
+        if (removeButton) {
+            const fileId = removeButton.dataset.fileId;
+            
+            // Удаляем все элементы с соответствующим fileId
+            document.querySelector(`.file-item[data-file-id="${fileId}"]`)?.remove();
+            document.querySelector(`.file-edit-form[data-file-id="${fileId}"]`)?.remove();
+            document.querySelector(`input[type="file"][data-file-id="${fileId}"]`)?.remove();
+        }
+    });
+
+    // Валидация формы перед отправкой
+    form.addEventListener('submit', (e) => {
+        const files = document.querySelectorAll('input[name="apk_files"]');
+        console.log('Submitting form, files count:', files.length);
+        
+        if (files.length === 0) {
+            e.preventDefault();
+            alert('Пожалуйста, выберите хотя бы один APK файл');
+            return;
+        }
+    });
+});
+</script>
+{% endblock %} 

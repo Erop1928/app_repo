@@ -1,0 +1,22 @@
+# Виртуальное окружение
+venv/
+env/
+.env
+
+# База данных
+*.db
+
+# Загруженные файлы
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.idea/
+.vscode/
+
+# Системные файлы
+.DS_Store 

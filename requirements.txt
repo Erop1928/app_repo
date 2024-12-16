@@ -1,0 +1,8 @@
+flask==2.3.3
+flask-sqlalchemy==3.1.1
+flask-login==0.6.2
+flask-wtf==1.1.1
+werkzeug==2.3.7
+python-dotenv==1.0.0
+flask-httpauth==4.8.0
+sqlalchemy==2.0.21 

@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="app-header">
+        <h1>Пакетная загрузка версий</h1>
+        <div class="app-meta">
+            <span class="package-name">{{ application.package_name }}</span>
+            <span class="app-name">{{ application.name }}</span>
+        </div>
+    </div>
+
+    <div class="upload-limits">
+        <h3>Ограничения загрузки:</h3>
+        <ul>
+            <li>Максимальное количество файлов: {{ config.MAX_FILES_COUNT }}</li>
+            <li>Максимальный размер одного файла: {{ (config.MAX_FILE_SIZE / (1024*1024))|int }} MB</li>
+            <li>Максимальный общий размер: {{ (config.MAX_CONTENT_LENGTH / (1024*1024))|int }} MB</li>
+        </ul>
+    </div>
+
+    <div class="upload-container" id="dropZone">
+        <div class="upload-message">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <p>Перетащите APK файлы сюда или <label for="fileInput" class="file-label">выберите файлы</label></p>
+            <p class="upload-format">Формат: {{ application.package_name }}-vX.X.X-branch.apk</p>
+        </div>
+        
+        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group">
+                <div class="file-upload-wrapper">
+                    {{ form.apk_files(class="form-control-file", id="fileInput", multiple=True) }}
+                </div>
+            </div>
+
+            <div id="fileList" class="file-list"></div>
+
+            <div class="form-actions">
+                {{ form.submit(class="btn btn-primary", id="submitBtn") }}
+                <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.app-meta {
+    margin-bottom: 20px;
+    color: var(--text-muted);
+}
+
+.package-name {
+    font-family: monospace;
+    margin-right: 15px;
+}
+
+.upload-container {
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    margin: 20px 0;
+    transition: all 0.3s ease;
+    background-color: var(--bg-secondary);
+}
+
+.upload-container.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+.upload-message {
+    margin: 20px 0;
+}
+
+.upload-message i {
+    font-size: 48px;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+
+.upload-message p {
+    margin: 10px 0;
+    color: var(--text-color);
+    font-size: 1.1em;
+}
+
+.upload-format {
+    color: var(--text-muted) !important;
+    font-size: 0.9em !important;
+}
+
+.file-upload-wrapper {
+    position: relative;
+}
+
+.form-control-file {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-list {
+    margin: 20px 0;
+    text-align: left;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.file-item i {
+    color: var(--primary-color);
+}
+
+.file-info {
+    flex-grow: 1;
+}
+
+.file-name {
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+.file-meta {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.remove-file {
+    color: var(--danger-color);
+    cursor: pointer;
+    padding: 5px;
+    border: none;
+    background: none;
+    font-size: 1.1em;
+}
+
+.remove-file:hover {
+    color: var(--danger-hover);
+}
+
+.file-label {
+    color: var(--primary-color);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.file-label:hover {
+    color: var(--primary-hover);
+}
+
+.form-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.upload-limits {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.upload-limits h3 {
+    margin-top: 0;
+    color: var(--text-color);
+}
+
+.upload-limits ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.upload-limits li {
+    color: var(--text-muted);
+    margin: 5px 0;
+    font-size: 0.9em;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileList = document.getElementById('fileList');
+    const form = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function validateFile(file) {
+        // Проверяем расширение файла
+        if (!file.name.toLowerCase().endsWith('.apk')) {
+            alert('Можно загружать только APK файлы');
+            return false;
+        }
+        
+        // Проверяем формат имени файла
+        const packageName = '{{ application.package_name }}';
+        const fileNamePattern = new RegExp(`^${packageName}-v[\\d\\.]+(-[\\w]+)?\\.apk$`);
+        if (!fileNamePattern.test(file.name)) {
+            alert(`Имя файла должно соответствовать формату: ${packageName}-vX.X.X-branch.apk`);
+            return false;
+        }
+        
+        // Проверяем размер файла
+        const maxFileSize = {{ config.MAX_FILE_SIZE }};
+        if (file.size > maxFileSize) {
+            alert(`Файл ${file.name} превышает максимальный размер (${formatFileSize(maxFileSize)})`);
+            return false;
+        }
+        
+        return true;
+    }
+    
+    function validateFiles(files) {
+        const maxFiles = {{ config.MAX_FILES_COUNT }};
+        const maxTotalSize = {{ config.MAX_CONTENT_LENGTH }};
+        
+        if (files.length > maxFiles) {
+            alert(`Превышено максимальное количество файлов (${maxFiles})`);
+            return false;
+        }
+        
+        let totalSize = 0;
+        for (const file of files) {
+            if (!validateFile(file)) {
+                return false;
+            }
+            totalSize += file.size;
+        }
+        
+        if (totalSize > maxTotalSize) {
+            alert(`Превышен максимальный общий размер файлов (${formatFileSize(maxTotalSize)})`);
+            return false;
+        }
+        
+        return true;
+    }
+    
+    function addFileToList(file) {
+        if (!validateFile(file)) return false;
+        
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+            <i class="fas fa-file-archive"></i>
+            <div class="file-info">
+                <div class="file-name">${file.name}</div>
+                <div class="file-meta">${formatFileSize(file.size)}</div>
+            </div>
+            <button type="button" class="remove-file">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        fileItem.querySelector('.remove-file').addEventListener('click', () => {
+            fileItem.remove();
+            updateSubmitButton();
+            updateFileInput();
+        });
+        
+        fileList.appendChild(fileItem);
+        return true;
+    }
+    
+    function updateSubmitButton() {
+        submitBtn.disabled = fileList.children.length === 0;
+    }
+    
+    function updateFileInput() {
+        const dt = new DataTransfer();
+        const files = Array.from(fileInput.files);
+        const currentFileNames = Array.from(fileList.children).map(item => 
+            item.querySelector('.file-name').textContent
+        );
+        
+        files.forEach(file => {
+            if (currentFileNames.includes(file.name)) {
+                dt.items.add(file);
+            }
+        });
+        
+        fileInput.files = dt.files;
+    }
+    
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (!validateFiles(files)) {
+            fileInput.value = '';
+            return;
+        }
+        
+        let validFiles = 0;
+        files.forEach(file => {
+            if (addFileToList(file)) {
+                validFiles++;
+            }
+        });
+        
+        if (validFiles === 0) {
+            fileInput.value = '';
+        }
+        
+        updateSubmitButton();
+    });
+    
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        
+        const files = Array.from(e.dataTransfer.files);
+        if (!validateFiles(files)) {
+            return;
+        }
+        
+        let validFiles = 0;
+        files.forEach(file => {
+            if (addFileToList(file)) {
+                validFiles++;
+            }
+        });
+        
+        if (validFiles > 0) {
+            const dt = new DataTransfer();
+            files.forEach(file => dt.items.add(file));
+            fileInput.files = dt.files;
+            updateSubmitButton();
+        }
+    });
+
+    form.addEventListener('submit', (e) => {
+        if (fileList.children.length === 0) {
+            e.preventDefault();
+            alert('Пожалуйста, выберите хотя бы один APK файл');
+        }
+    });
+});
+</script>
+{% endblock %} 

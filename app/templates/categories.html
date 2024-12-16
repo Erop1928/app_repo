@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Управление категориями</h1>
+    
+    <div class="category-form">
+        <h2>Добавить категорию</h2>
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            <div>
+                {{ form.name.label }}
+                {{ form.name() }}
+            </div>
+            <div>
+                {{ form.description.label }}
+                {{ form.description() }}
+            </div>
+            {{ form.submit() }}
+        </form>
+    </div>
+
+    <div class="category-list">
+        <h2>Существующие категории</h2>
+        {% for category in categories %}
+        <div class="category-item">
+            <h3>{{ category.name }}</h3>
+            {% if category.description %}
+            <p>{{ category.description }}</p>
+            {% endif %}
+            <div class="actions">
+                <a href="{{ url_for('main.delete_category', id=category.id) }}" 
+                   class="btn btn-danger"
+                   onclick="return confirm('Вы уверены?')">Удалить</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

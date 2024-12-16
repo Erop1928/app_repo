@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Редактирование APK файла</h1>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        <div>
+            {{ form.version.label }}
+            {{ form.version() }}
+        </div>
+        <div>
+            {{ form.description.label }}
+            {{ form.description() }}
+        </div>
+        <div>
+            {{ form.changelog.label }}
+            {{ form.changelog() }}
+        </div>
+        {{ form.submit() }}
+    </form>
+</div>
+{% endblock %} 

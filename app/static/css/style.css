@@ -1,0 +1,707 @@
+/* Переменные для тем */
+:root[data-theme="light"] {
+    --bg-color: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --text-color: #212529;
+    --text-muted: #6c757d;
+    --border-color: #dee2e6;
+    --primary-color: #4CAF50;
+    --primary-hover: #43a047;
+    --danger-color: #dc3545;
+    --danger-hover: #c82333;
+    --flash-bg: #ffebee;
+    --flash-border: #ffcdd2;
+    --nav-bg: #f8f9fa;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+}
+
+:root[data-theme="dark"] {
+    --bg-color: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-color: #e0e0e0;
+    --text-muted: #888888;
+    --border-color: #404040;
+    --primary-color: #66bb6a;
+    --primary-hover: #81c784;
+    --danger-color: #f44336;
+    --danger-hover: #e57373;
+    --flash-bg: #311b1b;
+    --flash-border: #642424;
+    --nav-bg: #2d2d2d;
+    --input-bg: #333333;
+    --input-border: #404040;
+}
+
+/* Основные стили */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
+}
+
+nav {
+    background-color: var(--nav-bg);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.nav-logo i {
+    color: var(--primary-color);
+}
+
+.nav-categories {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.nav-category {
+    padding: 5px 15px;
+    border-radius: 20px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+}
+
+.nav-category:hover {
+    color: var(--text-color);
+    background-color: var(--bg-color);
+}
+
+.nav-category.active {
+    color: var(--primary-color);
+    background-color: var(--bg-color);
+    border: 1px solid var(--primary-color);
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.nav-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9em;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.nav-action:hover {
+    color: var(--text-color);
+    background-color: var(--bg-color);
+}
+
+@media (max-width: 768px) {
+    nav {
+        flex-direction: column;
+        gap: 15px;
+        padding: 10px;
+    }
+
+    .nav-left {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .nav-categories {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .nav-right {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+.theme-toggle {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    transition: color 0.3s;
+}
+
+.theme-toggle:hover {
+    color: var(--primary-color);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.login-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.flash {
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: var(--flash-bg);
+    border: 1px solid var(--flash-border);
+    border-radius: 4px;
+    color: var(--text-color);
+}
+
+/* Формы */
+form div {
+    margin-bottom: 15px;
+}
+
+input[type="text"],
+input[type="password"],
+textarea,
+select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    color: var(--text-color);
+}
+
+input[type="submit"],
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    background-color: var(--primary-color);
+    color: white;
+    text-decoration: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    transition: background-color 0.3s;
+}
+
+input[type="submit"]:hover,
+.btn:hover {
+    background-color: var(--primary-hover);
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+}
+
+.btn-danger:hover {
+    background-color: var(--danger-hover);
+}
+
+/* APK список */
+.apk-item {
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+}
+
+.apk-info {
+    margin: 10px 0;
+    color: var(--text-muted);
+}
+
+.description, .changelog {
+    margin: 15px 0;
+}
+
+/* Категории */
+.categories-filter {
+    margin: 20px 0;
+}
+
+.category-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.btn.active {
+    background-color: var(--primary-hover);
+}
+
+.category-form {
+    max-width: 600px;
+    margin-bottom: 40px;
+}
+
+.category-list {
+    margin-top: 20px;
+}
+
+.category-item {
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+}
+
+.category-item h3 {
+    margin-top: 0;
+}
+
+/* Загрузка файлов */
+.upload-container {
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    margin: 20px 0;
+    transition: border 0.3s ease;
+    background-color: var(--bg-secondary);
+}
+
+.upload-container.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+.upload-message {
+    font-size: 1.2em;
+    color: var(--text-muted);
+    margin: 20px 0;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    margin: 5px 0;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+}
+
+.file-name {
+    flex-grow: 1;
+}
+
+.file-size {
+    margin: 0 10px;
+    color: var(--text-muted);
+}
+
+.remove-file {
+    color: var(--danger-color);
+    cursor: pointer;
+}
+
+.file-edit-form {
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .category-buttons {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        margin: 5px 0;
+    }
+} 
+
+/* Сетка APK карточек */
+.apk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.apk-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.apk-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.apk-card-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.apk-icon {
+    width: 50px;
+    height: 50px;
+    background-color: var(--primary-color);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+}
+
+.apk-icon i {
+    font-size: 24px;
+    color: white;
+}
+
+.apk-title {
+    flex-grow: 1;
+}
+
+.apk-title h3 {
+    margin: 0;
+    font-size: 1.1em;
+    word-break: break-word;
+}
+
+.apk-category {
+    display: inline-block;
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+.apk-stats {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+
+.stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.apk-description, .apk-changelog {
+    margin: 15px 0;
+}
+
+.apk-description h4, .apk-changelog h4 {
+    color: var(--text-color);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.apk-description p, .apk-changelog p {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin: 0;
+    white-space: pre-line;
+}
+
+.apk-meta {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin: 15px 0;
+}
+
+.apk-meta span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.apk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+}
+
+.btn-edit {
+    background-color: var(--primary-color);
+    opacity: 0.9;
+}
+
+.btn i {
+    margin-right: 5px;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .apk-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .apk-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .apk-meta {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .apk-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+} 
+
+/* Версии и флаги */
+.version-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.version-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.version-title h3 {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+.branch {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    margin-left: 8px;
+}
+
+.branch.release {
+    background-color: #4caf50;
+    color: white;
+}
+
+.branch.debug {
+    background-color: #ff9800;
+    color: white;
+}
+
+.branch.beta {
+    background-color: #2196f3;
+    color: white;
+}
+
+.version-meta {
+    display: flex;
+    gap: 15px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-changelog {
+    border-radius: 4px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.version-changelog pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+}
+
+.flag {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    margin: 5px 0;
+}
+
+.flag.bug {
+    background-color: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.flag.feature {
+    background-color: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.flag.warning {
+    background-color: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.flag-meta {
+    margin-left: auto;
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.flag-form {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+/* Формы */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.form-text {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.errors {
+    color: var(--danger-color);
+    font-size: 0.9em;
+    margin-top: 4px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .version-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .version-meta {
+        flex-wrap: wrap;
+    }
+    
+    .flag {
+        flex-wrap: wrap;
+    }
+    
+    .flag-meta {
+        width: 100%;
+        margin-top: 5px;
+    }
+} 
+
+.version-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.stable-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 0.9em;
+}
+
+.stable-badge i {
+    font-size: 0.9em;
+}
+
+/* Стили для чекбокса */
+.checkbox-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+}
+
+.form-text {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-top: 4px;
+} 
