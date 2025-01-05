@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Базы данных
+*.db
+
+# Загруженные файлы
+uploads/
+
+# IDE
+.idea/
+.vscode/
+
+# Системные файлы
+.DS_Store
+Thumbs.db 
