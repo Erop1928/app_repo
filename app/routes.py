@@ -325,36 +325,49 @@ def upload_version(id):
     if form.validate_on_submit():
         file = form.apk_file.data
         if file:
-            # Создаем новую версию
-            version = ApkVersion(
-                application_id=application.id,
-                version_number=form.version_number.data,
-                branch=form.branch.data,
-                changelog=form.changelog.data,
-                is_stable=form.is_stable.data
-            )
-            
-            # Сохраняем файл
+            # Сначала сохраняем файл
             filename = secure_filename(file.filename)
-            file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-            file.save(file_path)
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
             
-            # Обновляем информацию о версии
-            version.file_name = filename
-            version.file_size = os.path.getsize(file_path)
+            # Создаем директорию, если её нет
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
             
-            # Если это стабильная версия, сбрасываем флаг у других версий
-            if version.is_stable:
-                ApkVersion.query.filter_by(
+            try:
+                file.save(file_path)
+                file_size = os.path.getsize(file_path)
+                
+                # Создаем новую версию
+                version = ApkVersion(
                     application_id=application.id,
-                    is_stable=True
-                ).update({'is_stable': False})
-            
-            db.session.add(version)
-            db.session.commit()
-            
-            flash('Новая версия успешно загружена', 'success')
-            return redirect(url_for('main.application_details', id=application.id))
+                    version_number=form.version_number.data,
+                    branch=form.branch.data,
+                    changelog=form.changelog.data,
+                    is_stable=form.is_stable.data,
+                    filename=filename,
+                    file_size=file_size,
+                    uploader=current_user
+                )
+                
+                # Если это стабильная версия, сбрасываем флаг у других версий
+                if version.is_stable:
+                    ApkVersion.query.filter_by(
+                        application_id=application.id,
+                        is_stable=True
+                    ).update({'is_stable': False})
+                
+                db.session.add(version)
+                db.session.commit()
+                
+                flash('Новая версия успешно загружена', 'success')
+                return redirect(url_for('main.application_details', id=application.id))
+                
+            except Exception as e:
+                # В случае ошибки удаляем загруженный файл
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                db.session.rollback()
+                flash(f'Ошибка при загрузке файла: {str(e)}', 'error')
+                return redirect(url_for('main.upload_version', id=application.id))
     
     return render_template('upload_version.html', 
                          title='Загрузка версии',
