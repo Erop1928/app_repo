@@ -25,6 +25,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     roles = db.relationship('Role', secondary=user_roles, lazy='subquery',
                           backref=db.backref('users', lazy=True))
+    uploaded_versions = db.relationship('ApkVersion', back_populates='uploader', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -61,7 +62,7 @@ class Application(db.Model):
     description = db.Column(db.Text)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
-    versions = db.relationship('ApkVersion', backref='application', lazy='dynamic', cascade='all, delete-orphan')
+    versions = db.relationship('ApkVersion', back_populates='application', lazy='dynamic', cascade='all, delete-orphan')
     
     def get_versions(self):
         """Получает список всех версий приложения"""
