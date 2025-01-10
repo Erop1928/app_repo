@@ -35,9 +35,6 @@ ENV PYTHONUNBUFFERED=1
 # Сделать entrypoint-скрипт исполняемым
 RUN chmod +x docker-entrypoint.sh
 
-# Переключение на пользователя app
-USER app
-
 # Открытие порта
 EXPOSE 5000
 
