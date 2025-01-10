@@ -14,10 +14,6 @@ if ! command -v docker-compose &> /dev/null; then
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
-# Создание необходимых директорий
-echo "Создание директорий..."
-mkdir -p uploads instance
-
 # Проверка наличия .env файла
 if [ ! -f ".env" ]; then
     echo "Создание .env файла..."
@@ -32,14 +28,12 @@ if [ ! -f ".env" ]; then
     sed -i "s|http://localhost|$HOST_URL|" .env
 fi
 
-# Установка прав на директории
-echo "Установка прав..."
-sudo chown -R 1000:1000 uploads instance
-sudo chmod -R 755 uploads instance
+# Остановка и удаление старых контейнеров и томов
+echo "Очистка старых контейнеров и томов..."
+docker-compose down -v
 
-# Сборка и запуск контейнеров
+# Создание и запуск новых контейнеров
 echo "Сборка и запуск контейнеров..."
-docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
 
