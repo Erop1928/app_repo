@@ -5,9 +5,13 @@ mkdir -p /app/instance
 mkdir -p /app/uploads
 
 # Установка правильных прав доступа
-chmod 777 /app/instance
-chmod 777 /app/uploads
+chown -R app:app /app/instance
+chown -R app:app /app/uploads
+chmod 755 /app/instance
+chmod 755 /app/uploads
 
+# Переключение на пользователя app для всех последующих операций
+exec gosu app bash -c '
 # Инициализация базы данных, если она еще не существует
 if [ ! -f "/app/instance/app.db" ]; then
     echo "Initializing database..."
@@ -21,4 +25,5 @@ exec gunicorn --bind 0.0.0.0:5000 \
     --timeout 600 \
     --access-logfile - \
     --error-logfile - \
-    "main:app" 
+    "main:app"
+' 

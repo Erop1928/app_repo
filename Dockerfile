@@ -3,6 +3,7 @@ FROM python:3.11-slim
 # Установка необходимых системных пакетов
 RUN apt-get update && apt-get install -y \
     build-essential \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска приложения
