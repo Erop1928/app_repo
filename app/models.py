@@ -90,17 +90,59 @@ class Application(db.Model):
 class ApkVersion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     application_id = db.Column(db.Integer, db.ForeignKey('application.id'), nullable=False)
-    version_number = db.Column(db.String(64), nullable=False)
-    branch = db.Column(db.String(64))
-    filename = db.Column(db.String(255), nullable=False)
-    file_size = db.Column(db.BigInteger)
+    version_number = db.Column(db.String(50), nullable=False)
+    branch = db.Column(db.String(50), nullable=False)
     changelog = db.Column(db.Text)
-    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-    downloads = db.Column(db.Integer, default=0)
     is_stable = db.Column(db.Boolean, default=False)
+    filename = db.Column(db.String(255), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    downloads = db.Column(db.Integer, default=0)
+    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
     uploader_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    uploader = db.relationship('User', backref=db.backref('uploads', lazy=True))
-    flags = db.relationship('VersionFlag', backref='version', lazy=True)
+    
+    application = db.relationship('Application', back_populates='versions')
+    uploader = db.relationship('User', back_populates='uploaded_versions')
+    flags = db.relationship('VersionFlag', back_populates='version', cascade='all, delete-orphan')
+    download_links = db.relationship('OneTimeDownloadLink', back_populates='version', cascade='all, delete-orphan')
+    
+    @staticmethod
+    def parse_filename(filename):
+        """
+        Парсит имя файла APK для извлечения package_name, version_number и branch.
+        Ожидаемый формат: package_name-vX.X.X-branch.apk
+        
+        Возвращает кортеж (package_name, version_number, branch) или (None, None, None) если формат неверный.
+        """
+        try:
+            # Убираем расширение .apk
+            if not filename.lower().endswith('.apk'):
+                return None, None, None
+            
+            base_name = filename[:-4]  # удаляем '.apk'
+            
+            # Разбиваем на части по дефису
+            parts = base_name.split('-')
+            
+            # Должно быть 2 или 3 части: package_name, version, [branch]
+            if len(parts) < 2 or len(parts) > 3:
+                return None, None, None
+            
+            package_name = parts[0]
+            
+            # Проверяем версию (должна начинаться с 'v')
+            if not parts[1].startswith('v'):
+                return None, None, None
+            
+            version_number = parts[1][1:]  # убираем 'v'
+            
+            # Если есть branch, берем его, иначе используем 'release'
+            branch = parts[2] if len(parts) > 2 else 'release'
+            
+            return package_name, version_number, branch
+            
+        except Exception as e:
+            print(f"Error parsing filename {filename}: {str(e)}")
+            return None, None, None
 
 class VersionFlag(db.Model):
     id = db.Column(db.Integer, primary_key=True)

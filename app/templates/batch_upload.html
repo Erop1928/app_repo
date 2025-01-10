@@ -277,15 +277,17 @@
 
 {% block scripts %}
 <script>
-(function() {
-    const CONFIG = {
-        MAX_FILE_SIZE: {{ config.MAX_FILE_SIZE }},
-        MAX_FILES_COUNT: {{ config.MAX_FILES_COUNT }},
-        MAX_CONTENT_LENGTH: {{ config.MAX_CONTENT_LENGTH }},
-        PACKAGE_NAME: '{{ application.package_name }}',
-        APPLICATION_ID: {{ application.id }}
-    };
+// Определяем глобальную конфигурацию
+window.CONFIG = {
+    maxFileSize: {{ config.MAX_FILE_SIZE }},
+    maxFilesCount: {{ config.MAX_FILES_COUNT }},
+    maxContentLength: {{ config.MAX_CONTENT_LENGTH }},
+    packageName: '{{ application.package_name }}',
+    applicationId: {{ application.id }}
+};
 
+// Основной код приложения
+(function() {
     document.addEventListener('DOMContentLoaded', function() {
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -311,14 +313,14 @@
                 return false;
             }
             
-            const fileNamePattern = new RegExp(`^${CONFIG.PACKAGE_NAME}-v[\\d\\.]+(-[\\w]+)?\\.apk$`);
+            const fileNamePattern = new RegExp(`^${window.CONFIG.packageName}-v[\\d\\.]+(-[\\w]+)?\\.apk$`);
             if (!fileNamePattern.test(file.name)) {
-                alert(`Имя файла должно соответствовать формату: ${CONFIG.PACKAGE_NAME}-vX.X.X-branch.apk`);
+                alert(`Имя файла должно соответствовать формату: ${window.CONFIG.packageName}-vX.X.X-branch.apk`);
                 return false;
             }
             
-            if (file.size > CONFIG.MAX_FILE_SIZE) {
-                alert(`Файл ${file.name} превышает максимальный размер (${formatFileSize(CONFIG.MAX_FILE_SIZE)})`);
+            if (file.size > window.CONFIG.maxFileSize) {
+                alert(`Файл ${file.name} превышает максимальный размер (${formatFileSize(window.CONFIG.maxFileSize)})`);
                 return false;
             }
             
@@ -326,8 +328,8 @@
         }
         
         function validateFiles(files) {
-            if (files.length > CONFIG.MAX_FILES_COUNT) {
-                alert(`Превышено максимальное количество файлов (${CONFIG.MAX_FILES_COUNT})`);
+            if (files.length > window.CONFIG.maxFilesCount) {
+                alert(`Превышено максимальное количество файлов (${window.CONFIG.maxFilesCount})`);
                 return false;
             }
             
@@ -339,31 +341,57 @@
                 totalSize += file.size;
             }
             
-            if (totalSize > CONFIG.MAX_CONTENT_LENGTH) {
-                alert(`Превышен максимальный общий размер файлов (${formatFileSize(CONFIG.MAX_CONTENT_LENGTH)})`);
+            if (totalSize > window.CONFIG.maxContentLength) {
+                alert(`Превышен максимальный общий размер файлов (${formatFileSize(window.CONFIG.maxContentLength)})`);
                 return false;
             }
             
             return true;
         }
         
-        async function uploadFile(file) {
+        async function uploadFile(file, progressCallback) {
             const formData = new FormData();
             formData.append('file', file);
             
             try {
-                const response = await fetch(`/application/${CONFIG.APPLICATION_ID}/temp_upload`, {
-                    method: 'POST',
-                    body: formData
+                const xhr = new XMLHttpRequest();
+                
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressCallback(percentComplete);
+                    }
+                };
+                
+                const uploadPromise = new Promise((resolve, reject) => {
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            try {
+                                const response = JSON.parse(xhr.responseText);
+                                resolve(response);
+                            } catch (e) {
+                                reject(new Error('Ошибка при разборе ответа сервера'));
+                            }
+                        } else {
+                            try {
+                                const response = JSON.parse(xhr.responseText);
+                                reject(new Error(response.error || 'Ошибка загрузки файла'));
+                            } catch (e) {
+                                reject(new Error('Ошибка загрузки файла'));
+                            }
+                        }
+                    };
+                    
+                    xhr.onerror = () => {
+                        reject(new Error('Ошибка сети при загрузке файла'));
+                    };
                 });
                 
-                const result = await response.json();
+                xhr.open('POST', `/application/${window.CONFIG.applicationId}/temp_upload`);
+                xhr.send(formData);
                 
-                if (!response.ok) {
-                    throw new Error(result.error || 'Ошибка загрузки файла');
-                }
+                return await uploadPromise;
                 
-                return result;
             } catch (error) {
                 throw new Error(`Ошибка загрузки файла ${file.name}: ${error.message}`);
             }
@@ -424,12 +452,15 @@
             fileList.appendChild(fileItem);
             
             try {
-                const result = await uploadFile(file);
-                
                 const progressBar = fileItem.querySelector('.progress-bar');
                 const progressText = fileItem.querySelector('.progress-text');
-                progressBar.style.width = '100%';
-                progressText.textContent = '100%';
+                
+                const updateProgress = (percent) => {
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = Math.round(percent) + '%';
+                };
+                
+                const result = await uploadFile(file, updateProgress);
                 
                 const versionItem = createVersionInfo(result);
                 versionsInfo.appendChild(versionItem);
@@ -462,18 +493,24 @@
             submitBtn.disabled = uploadedFiles.size === 0;
         }
         
-        fileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
+        async function handleFiles(files) {
             if (!validateFiles(files)) {
-                fileInput.value = '';
                 return;
             }
+            
+            submitBtn.disabled = true;
             
             for (const file of files) {
                 await addFileToList(file);
             }
             
             updateSubmitButton();
+        }
+        
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            await handleFiles(files);
+            fileInput.value = '';
         });
         
         dropZone.addEventListener('dragover', (e) => {
@@ -491,15 +528,7 @@
             dropZone.classList.remove('dragover');
             
             const files = Array.from(e.dataTransfer.files);
-            if (!validateFiles(files)) {
-                return;
-            }
-            
-            for (const file of files) {
-                await addFileToList(file);
-            }
-            
-            updateSubmitButton();
+            await handleFiles(files);
         });
 
         form.addEventListener('submit', (e) => {
