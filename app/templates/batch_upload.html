@@ -142,6 +142,35 @@
     color: var(--text-muted);
 }
 
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-top: 5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--primary-color);
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-color);
+    font-size: 0.8em;
+    font-weight: bold;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
 .remove-file {
     color: var(--danger-color);
     cursor: pointer;
@@ -271,16 +300,19 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const fileItem = document.createElement('div');
         fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-            <i class="fas fa-file-archive"></i>
-            <div class="file-info">
-                <div class="file-name">${file.name}</div>
-                <div class="file-meta">${formatFileSize(file.size)}</div>
-            </div>
-            <button type="button" class="remove-file">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
+        fileItem.innerHTML = 
+            '<i class="fas fa-file-archive"></i>' +
+            '<div class="file-info">' +
+                '<div class="file-name">' + file.name + '</div>' +
+                '<div class="file-meta">' + formatFileSize(file.size) + '</div>' +
+                '<div class="progress-bar-container">' +
+                    '<div class="progress-bar" style="width: 0%"></div>' +
+                    '<span class="progress-text">0%</span>' +
+                '</div>' +
+            '</div>' +
+            '<button type="button" class="remove-file">' +
+                '<i class="fas fa-times"></i>' +
+            '</button>';
         
         fileItem.querySelector('.remove-file').addEventListener('click', () => {
             fileItem.remove();
@@ -290,6 +322,57 @@ document.addEventListener('DOMContentLoaded', function() {
         
         fileList.appendChild(fileItem);
         return true;
+    }
+    
+    function updateProgress(fileItem, progress) {
+        const progressBar = fileItem.querySelector('.progress-bar');
+        const progressText = fileItem.querySelector('.progress-text');
+        progressBar.style.width = `${progress}%`;
+        progressText.textContent = `${Math.round(progress)}%`;
+    }
+    
+    function uploadFiles(files) {
+        const formData = new FormData(form);
+        
+        // Отключаем кнопку отправки
+        submitBtn.disabled = true;
+        
+        // Создаем и настраиваем XMLHttpRequest
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+        
+        // Обработчик прогресса загрузки
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                const totalProgress = (e.loaded / e.total) * 100;
+                const fileItems = fileList.querySelectorAll('.file-item');
+                
+                // Обновляем прогресс для каждого файла
+                fileItems.forEach(fileItem => {
+                    updateProgress(fileItem, totalProgress);
+                });
+            }
+        };
+        
+        // Обработчик завершения загрузки
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                // Перенаправляем на страницу с результатом
+                window.location.href = xhr.responseURL;
+            } else {
+                alert('Ошибка при загрузке файлов');
+                submitBtn.disabled = false;
+            }
+        };
+        
+        // Обработчик ошибки
+        xhr.onerror = function() {
+            alert('Ошибка при загрузке файлов');
+            submitBtn.disabled = false;
+        };
+        
+        // Отправляем данные
+        xhr.send(formData);
     }
     
     function updateSubmitButton() {
@@ -368,10 +451,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     form.addEventListener('submit', (e) => {
-        if (fileList.children.length === 0) {
-            e.preventDefault();
+        e.preventDefault();
+        
+        const files = Array.from(fileInput.files);
+        if (files.length === 0) {
             alert('Пожалуйста, выберите хотя бы один APK файл');
+            return;
         }
+        
+        uploadFiles(files);
     });
 });
 </script>
