@@ -59,7 +59,7 @@
                     </span>
                     <span class="versions-count">
                         <i class="fas fa-history"></i>
-                        {{ app.versions|length }} версий
+                        {{ app.get_version_count() }} версий
                     </span>
                 </div>
                 <a href="{{ url_for('main.application_details', id=app.id) }}" class="btn btn-secondary">

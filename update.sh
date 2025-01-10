@@ -63,3 +63,5 @@ echo -e "${YELLOW}Последние логи:${NC}"
 docker-compose logs --tail=50
 
 echo -e "${GREEN}Обновление завершено успешно!${NC}" 
+
+docker ps

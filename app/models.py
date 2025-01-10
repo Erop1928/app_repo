@@ -63,6 +63,10 @@ class Application(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     versions = db.relationship('ApkVersion', backref='application', lazy='dynamic', cascade='all, delete-orphan')
     
+    def get_versions(self):
+        """Получает список всех версий приложения"""
+        return self.versions.order_by(ApkVersion.upload_date.desc()).all()
+    
     def get_latest_release(self):
         """Получает последнюю стабильную версию приложения"""
         return self.versions.filter_by(is_stable=True).order_by(ApkVersion.upload_date.desc()).first() or \
