@@ -2,30 +2,14 @@
 
 {% block content %}
 <div class="container">
-    <div class="app-header">
-        <h1>Загрузка новой версии</h1>
-        <div class="app-meta">
-            <span class="package-name">{{ application.package_name }}</span>
-            <span class="app-name">{{ application.name }}</span>
-        </div>
+    <h1>Загрузка новой версии</h1>
+    
+    <div class="app-meta">
+        <span class="package-name">{{ application.package_name }}</span>
+        <span class="app-name">{{ application.name }}</span>
     </div>
-
+    
     <div class="upload-container" id="dropZone">
-        <div class="upload-message">
-            <i class="fas fa-cloud-upload-alt"></i>
-            <p>Перетащите APK файл сюда или <label for="fileInput" class="file-label">выберите файл</label></p>
-            <p class="upload-format">Формат: {{ application.package_name }}-vX.X.X-branch.apk</p>
-        </div>
-        
-        <div id="contextMenu" class="context-menu">
-            <div class="menu-item" id="selectFileBtn">
-                <i class="fas fa-folder-open"></i> Выбрать файл
-            </div>
-            <div class="menu-item" id="pasteFileBtn">
-                <i class="fas fa-paste"></i> Вставить из буфера
-            </div>
-        </div>
-
         <form method="POST" enctype="multipart/form-data" id="uploadForm">
             {{ form.hidden_tag() }}
             
@@ -44,6 +28,31 @@
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
+            </div>
+
+            <div class="form-group">
+                {{ form.version_number.label }}
+                {{ form.version_number(class="form-control") }}
+                {% if form.version_number.errors %}
+                <div class="errors">
+                    {% for error in form.version_number.errors %}
+                        <span class="error">{{ error }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <small class="form-text">Например: 1.0.0</small>
+            </div>
+
+            <div class="form-group">
+                {{ form.branch.label }}
+                {{ form.branch(class="form-control") }}
+                {% if form.branch.errors %}
+                <div class="errors">
+                    {% for error in form.branch.errors %}
+                        <span class="error">{{ error }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
 
             <div class="form-group">
@@ -73,11 +82,111 @@
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const clearFile = document.getElementById('clearFile');
+    const dropZone = document.getElementById('dropZone');
+    const versionInput = document.getElementById('version_number');
+    const branchSelect = document.getElementById('branch');
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function parseFileName(filename) {
+        try {
+            // Пример: com.example.app-v1.0.0-release.apk
+            const parts = filename.replace('.apk', '').split('-');
+            if (parts.length >= 2) {
+                const version = parts[1].replace('v', '');
+                const branch = parts.length > 2 ? parts[2] : 'release';
+                return { version, branch };
+            }
+        } catch (e) {
+            console.error('Error parsing filename:', e);
+        }
+        return null;
+    }
+    
+    function updateFileInfo(file) {
+        if (file) {
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            filePreview.style.display = 'block';
+            
+            // Попытка распарсить имя файла
+            const fileInfo = parseFileName(file.name);
+            if (fileInfo) {
+                versionInput.value = fileInfo.version;
+                branchSelect.value = fileInfo.branch;
+            }
+        } else {
+            filePreview.style.display = 'none';
+            fileName.textContent = '';
+            fileSize.textContent = '';
+        }
+    }
+    
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        updateFileInfo(file);
+    });
+    
+    clearFile.addEventListener('click', function() {
+        fileInput.value = '';
+        updateFileInfo(null);
+    });
+    
+    // Drag and drop functionality
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+    
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            updateFileInfo(file);
+        }
+    });
+});
+</script>
 {% endblock %}
 
 {% block styles %}
 <style>
+.app-meta {
+    margin-bottom: 20px;
+    color: var(--text-muted);
+}
+
+.package-name {
+    font-family: monospace;
+    margin-right: 15px;
+}
+
 .upload-container {
     border: 2px dashed var(--border-color);
     border-radius: 8px;
@@ -85,49 +194,26 @@
     text-align: center;
     margin: 20px 0;
     transition: all 0.3s ease;
-    position: relative;
     background-color: var(--bg-secondary);
 }
 
 .upload-container.dragover {
     border-color: var(--primary-color);
-    background-color: rgba(76, 175, 80, 0.1);
-    transform: scale(1.02);
-}
-
-.upload-message {
-    margin: 20px 0;
-}
-
-.upload-message i {
-    font-size: 48px;
-    color: var(--text-muted);
-    margin-bottom: 15px;
-}
-
-.upload-message p {
-    margin: 10px 0;
-    color: var(--text-color);
-    font-size: 1.1em;
-}
-
-.upload-format {
-    color: var(--text-muted) !important;
-    font-size: 0.9em !important;
+    background-color: var(--bg-hover);
 }
 
 .file-upload-wrapper {
-    position: relative;
+    margin-bottom: 20px;
 }
 
 .form-control-file {
-    position: absolute;
-    top: 0;
-    left: 0;
+    display: block;
     width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 
 .file-preview {
@@ -145,7 +231,6 @@
 }
 
 .selected-file i {
-    font-size: 24px;
     color: var(--primary-color);
 }
 
@@ -160,212 +245,62 @@
     color: var(--danger-color);
     cursor: pointer;
     padding: 5px;
-    font-size: 1.1em;
-    transition: color 0.3s;
 }
 
 .btn-clear:hover {
-    color: var(--danger-hover);
+    color: var(--danger-color-hover);
 }
 
-.file-label {
-    color: var(--primary-color);
-    cursor: pointer;
-    text-decoration: underline;
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
 }
 
-.file-label:hover {
-    color: var(--primary-hover);
-}
-
-.context-menu {
-    display: none;
-    position: absolute;
-    background-color: var(--bg-color);
+.form-control {
+    width: 100%;
+    padding: 8px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    padding: 5px 0;
-    z-index: 1000;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 
-.menu-item {
-    padding: 8px 15px;
-    cursor: pointer;
+.form-text {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+.checkbox-container {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: var(--text-color);
-    transition: background-color 0.2s;
+    gap: 10px;
 }
 
-.menu-item:hover {
-    background-color: var(--bg-secondary);
-}
-
-.menu-item i {
+.form-check-input {
     width: 20px;
-    text-align: center;
+    height: 20px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 30px;
+}
+
+@media (max-width: 768px) {
+    .upload-container {
+        padding: 20px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
 }
 </style>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    const filePreview = document.getElementById('filePreview');
-    const fileName = document.getElementById('fileName');
-    const fileSize = document.getElementById('fileSize');
-    const clearFile = document.getElementById('clearFile');
-    const form = document.getElementById('uploadForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const contextMenu = document.getElementById('contextMenu');
-    const selectFileBtn = document.getElementById('selectFileBtn');
-    const pasteFileBtn = document.getElementById('pasteFileBtn');
-    
-    // Форматирование размера файла
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-    
-    // Проверка файла
-    function validateFile(file) {
-        const expectedPackage = '{{ application.package_name }}';
-        
-        if (!file.name.endsWith('.apk')) {
-            alert('Пожалуйста, выберите APK файл');
-            return false;
-        }
-        
-        if (!file.name.startsWith(expectedPackage)) {
-            alert('Имя файла должно начинаться с ' + expectedPackage);
-            return false;
-        }
-        
-        if (!file.name.match(/^[\w.]+?-v[\d.]+(-[\w]+)?\.apk$/)) {
-            alert('Неверный формат имени файла. Ожидается: package_name-vX.X.X-branch.apk');
-            return false;
-        }
-        
-        return true;
-    }
-    
-    // Обработка файла
-    function handleFile(file) {
-        if (validateFile(file)) {
-            fileName.textContent = file.name;
-            fileSize.textContent = formatFileSize(file.size);
-            filePreview.style.display = 'block';
-            submitBtn.disabled = false;
-            
-            // Создаем новый FileList
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            fileInput.files = dataTransfer.files;
-        } else {
-            clearFile.click();
-        }
-    }
-    
-    // Drag and Drop обработчики
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            handleFile(file);
-        }
-    });
-    
-    // Обработка выбора файла через input
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            handleFile(file);
-        }
-    });
-    
-    // Очистка выбранного файла
-    clearFile.addEventListener('click', () => {
-        fileInput.value = '';
-        filePreview.style.display = 'none';
-        submitBtn.disabled = true;
-    });
-    
-    // Начальное состояние кнопки отправки
-    submitBtn.disabled = true;
-    
-    // Валидация формы перед отправкой
-    form.addEventListener('submit', (e) => {
-        if (!fileInput.files.length) {
-            e.preventDefault();
-            alert('Пожалуйста, выберите файл');
-        }
-    });
-
-    // Контекстное меню
-    dropZone.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-        contextMenu.style.display = 'block';
-        contextMenu.style.left = e.pageX + 'px';
-        contextMenu.style.top = e.pageY + 'px';
-    });
-
-    // Закрытие контекстного меню при клике вне его
-    document.addEventListener('click', function(e) {
-        if (!contextMenu.contains(e.target)) {
-            contextMenu.style.display = 'none';
-        }
-    });
-
-    // Выбор файла через контекстное меню
-    selectFileBtn.addEventListener('click', function() {
-        fileInput.click();
-        contextMenu.style.display = 'none';
-    });
-
-    // Вставка файла из буфера обмена
-    pasteFileBtn.addEventListener('click', async function() {
-        try {
-            const clipboardItems = await navigator.clipboard.read();
-            for (const clipboardItem of clipboardItems) {
-                for (const type of clipboardItem.types) {
-                    if (type.startsWith('application/')) {
-                        const blob = await clipboardItem.getType(type);
-                        const file = new File([blob], 'pasted-file.apk', { type: 'application/vnd.android.package-archive' });
-                        handleFile(file);
-                        break;
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Failed to read clipboard:', err);
-            alert('Не удалось получить файл из буфера обмена');
-        }
-        contextMenu.style.display = 'none';
-    });
-
-    // Предотвращение открытия контекстного меню браузера в зоне загрузки
-    dropZone.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-    });
-});
-</script>
 {% endblock %} 

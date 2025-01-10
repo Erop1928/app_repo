@@ -319,97 +319,47 @@ def application_details(id):
 @main.route('/application/<int:id>/upload', methods=['GET', 'POST'])
 @login_required
 def upload_version(id):
-    try:
-        application = Application.query.get_or_404(id)
-        form = UploadApkForm()
-        
-        if form.validate_on_submit():
-            if not form.apk_file.data:
-                flash('Файл не выбран')
-                return redirect(request.url)
-                
-            file = form.apk_file.data
-            filename = secure_filename(file.filename)
-            
-            # Парсим информацию из имени файла
-            package_name, version_number, branch = ApkVersion.parse_filename(filename)
-            
-            if not package_name or package_name != application.package_name:
-                flash('Имя файла не соответствует формату: package_name-vX.X.X-branch.apk')
-                return redirect(request.url)
-            
-            # Проверяем существование версии
-            existing_version = ApkVersion.query.filter_by(
+    application = Application.query.get_or_404(id)
+    form = UploadApkForm()
+    
+    if form.validate_on_submit():
+        file = form.apk_file.data
+        if file:
+            # Создаем новую версию
+            version = ApkVersion(
                 application_id=application.id,
-                version_number=version_number,
-                branch=branch
-            ).first()
+                version_number=form.version_number.data,
+                branch=form.branch.data,
+                changelog=form.changelog.data,
+                is_stable=form.is_stable.data
+            )
             
-            if existing_version:
-                flash(f'Версия {version_number} ({branch}) уже существует')
-                return redirect(request.url)
+            # Сохраняем файл
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+            file.save(file_path)
             
-            # Создаем директорию для загрузок, если её нет
-            upload_folder = Config.UPLOAD_FOLDER
-            if not os.path.exists(upload_folder):
-                try:
-                    os.makedirs(upload_folder)
-                except Exception as e:
-                    flash(f'Ошибка при создании директории для загрузок: {str(e)}')
-                    return redirect(request.url)
+            # Обновляем информацию о версии
+            version.file_name = filename
+            version.file_size = os.path.getsize(file_path)
             
-            file_path = os.path.join(upload_folder, filename)
-            try:
-                file.save(file_path)
-                
-                version = ApkVersion(
+            # Если это стабильная версия, сбрасываем флаг у других версий
+            if version.is_stable:
+                ApkVersion.query.filter_by(
                     application_id=application.id,
-                    version_number=version_number,
-                    branch=branch,
-                    filename=filename,
-                    file_size=os.path.getsize(file_path),
-                    changelog=form.changelog.data,
-                    is_stable=form.is_stable.data,
-                    uploader=current_user
-                )
-                db.session.add(version)
-                
-                # Логируем загрузку версии
-                UserActionLog.log_action(
-                    current_user,
-                    'upload_version',
-                    'version',
-                    version.id,
-                    None,
-                    {
-                        'version_number': version.version_number,
-                        'branch': version.branch,
-                        'filename': version.filename,
-                        'file_size': version.file_size,
-                        'changelog': version.changelog,
-                        'is_stable': version.is_stable
-                    },
-                    f'Загружена новая версия {version_number} ({branch})'
-                )
-                
-                db.session.commit()
-                flash('Новая версия успешно загружена')
-                return redirect(url_for('main.application_details', id=application.id))
-                
-            except Exception as e:
-                db.session.rollback()
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                flash(f'Ошибка при загрузке файла: {str(e)}')
-                print(f'Error uploading file: {str(e)}')
-                return redirect(request.url)
-        
-        return render_template('upload_version.html', form=form, application=application)
-        
-    except Exception as e:
-        flash(f'Ошибка: {str(e)}')
-        print(f'Error in upload_version route: {str(e)}')
-        return redirect(url_for('main.index'))
+                    is_stable=True
+                ).update({'is_stable': False})
+            
+            db.session.add(version)
+            db.session.commit()
+            
+            flash('Новая версия успешно загружена', 'success')
+            return redirect(url_for('main.application_details', id=application.id))
+    
+    return render_template('upload_version.html', 
+                         title='Загрузка версии',
+                         form=form,
+                         application=application)
 
 @main.route('/version/<int:id>/flag', methods=['POST'])
 @login_required

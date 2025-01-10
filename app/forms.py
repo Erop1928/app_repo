@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, FileField, BooleanField, MultipleFileField, SelectMultipleField
-from wtforms.validators import DataRequired, Length, EqualTo, Optional
+from wtforms.validators import DataRequired, Length, EqualTo, Optional, FileRequired, FileAllowed, Regexp
 
 class LoginForm(FlaskForm):
     username = StringField('Имя пользователя', validators=[DataRequired()])
@@ -20,7 +20,20 @@ class ApplicationForm(FlaskForm):
     submit = SubmitField('Сохранить')
 
 class UploadApkForm(FlaskForm):
-    apk_file = FileField('APK файл', validators=[DataRequired()])
+    apk_file = FileField('APK файл', validators=[
+        FileRequired(),
+        FileAllowed(['apk'], 'Разрешены только APK файлы')
+    ])
+    version_number = StringField('Номер версии', validators=[
+        DataRequired(),
+        Regexp(r'^\d+\.\d+\.\d+$', message='Номер версии должен быть в формате X.X.X')
+    ])
+    branch = SelectField('Тип сборки', choices=[
+        ('release', 'Release'),
+        ('debug', 'Debug'),
+        ('beta', 'Beta'),
+        ('alpha', 'Alpha')
+    ], validators=[DataRequired()])
     changelog = TextAreaField('Список изменений')
     is_stable = BooleanField('Стабильная версия')
     submit = SubmitField('Загрузить')
