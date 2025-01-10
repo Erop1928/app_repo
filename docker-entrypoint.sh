@@ -1,22 +1,21 @@
 #!/bin/bash
 
-# Проверка и создание необходимых директорий
-mkdir -p /app/instance
+# Создание директории для загрузок
 mkdir -p /app/uploads
-
-# Установка правильных прав доступа
-chown -R app:app /app/instance
 chown -R app:app /app/uploads
-chmod 755 /app/instance
-chmod 755 /app/uploads
 
-# Переключение на пользователя app для всех последующих операций
+# Ожидание готовности базы данных
+echo "Waiting for PostgreSQL..."
+while ! nc -z db 5432; do
+  sleep 0.1
+done
+echo "PostgreSQL started"
+
+# Запуск приложения от имени пользователя app
 exec gosu app bash -c '
-# Инициализация базы данных, если она еще не существует
-if [ ! -f "/app/instance/app.db" ]; then
-    echo "Initializing database..."
-    python init_db.py
-fi
+# Инициализация базы данных
+echo "Initializing database..."
+python init_db.py
 
 # Запуск gunicorn
 exec gunicorn --bind 0.0.0.0:5000 \

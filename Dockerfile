@@ -4,6 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     build-essential \
     gosu \
+    netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для запуска приложения
@@ -24,8 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=app:app . .
 
 # Создание директорий для данных
-RUN mkdir -p uploads instance && \
-    chown -R app:app uploads instance
+RUN mkdir -p uploads && \
+    chown -R app:app uploads
 
 # Установка переменных окружения
 ENV FLASK_APP=main.py

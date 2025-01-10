@@ -9,13 +9,8 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev'
     
     # Пути к базам данных
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'sqlite:///' + os.path.join(basedir, 'app.db')
-    LOGS_DATABASE_URI = os.environ.get('LOGS_DATABASE_URL') or \
-        'sqlite:///' + os.path.join(basedir, 'logs.db')
-    SQLALCHEMY_BINDS = {
-        'logs': LOGS_DATABASE_URI
-    }
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SQLALCHEMY_BINDS = {}
     
     # Папка для загрузок
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or \

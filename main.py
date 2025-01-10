@@ -6,19 +6,12 @@ app = create_app()
 
 def init_directories():
     """Создаем необходимые директории при запуске"""
-    directories = [
-        Config.UPLOAD_FOLDER,
-        os.path.dirname(Config.SQLALCHEMY_DATABASE_URI.replace('sqlite:///', '')),
-        os.path.dirname(Config.LOGS_DATABASE_URI.replace('sqlite:///', ''))
-    ]
-    
-    for directory in directories:
-        if directory and not os.path.exists(directory):
-            try:
-                os.makedirs(directory)
-                print(f"Создана директория: {directory}")
-            except Exception as e:
-                print(f"Ошибка при создании директории {directory}: {str(e)}")
+    if not os.path.exists(Config.UPLOAD_FOLDER):
+        try:
+            os.makedirs(Config.UPLOAD_FOLDER)
+            print(f"Создана директория: {Config.UPLOAD_FOLDER}")
+        except Exception as e:
+            print(f"Ошибка при создании директории {Config.UPLOAD_FOLDER}: {str(e)}")
 
 if __name__ == '__main__':
     with app.app_context():

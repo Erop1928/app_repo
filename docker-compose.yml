@@ -7,14 +7,24 @@ services:
       - "5000"
     volumes:
       - app_uploads:/app/uploads
-      - app_instance:/app/instance
     environment:
       - FLASK_APP=main.py
       - FLASK_ENV=production
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key}
-      - DATABASE_URL=sqlite:///instance/app.db
-      - LOGS_DATABASE_URL=sqlite:///instance/logs.db
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/app_db
       - HOST_URL=${HOST_URL:-http://localhost}
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=app_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     restart: unless-stopped
 
   nginx:
@@ -31,4 +41,4 @@ services:
 
 volumes:
   app_uploads:
-  app_instance: 
+  postgres_data: 
