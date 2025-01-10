@@ -27,7 +27,7 @@ class UploadApkForm(FlaskForm):
     ])
     version_number = StringField('Номер версии', validators=[
         DataRequired(),
-        Regexp(r'^\d+\.\d+\.\d+$', message='Номер версии должен быть в формате X.X.X')
+        Regexp(r'^\d+(\.\d+)*$', message='Номер версии должен состоять из цифр, разделенных точками')
     ])
     branch = SelectField('Тип сборки', choices=[
         ('release', 'Release'),

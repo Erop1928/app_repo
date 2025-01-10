@@ -28,6 +28,10 @@
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
+                <div class="progress" style="display: none;">
+                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    <div class="progress-text">0%</div>
+                </div>
             </div>
 
             <div class="form-group">
@@ -40,7 +44,7 @@
                     {% endfor %}
                 </div>
                 {% endif %}
-                <small class="form-text">Например: 1.0.0</small>
+                <small class="form-text">Например: 4.2.57.4</small>
             </div>
 
             <div class="form-group">
@@ -95,6 +99,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const dropZone = document.getElementById('dropZone');
     const versionInput = document.getElementById('version_number');
     const branchSelect = document.getElementById('branch');
+    const uploadForm = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressBar = document.querySelector('.progress');
+    const progressBarInner = document.querySelector('.progress-bar');
+    const progressText = document.querySelector('.progress-text');
     
     function formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
@@ -106,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function parseFileName(filename) {
         try {
-            // Пример: com.example.app-v1.0.0-release.apk
+            // Пример: com.example.app-v4.2.57.4-release.apk
             const parts = filename.replace('.apk', '').split('-');
             if (parts.length >= 2) {
                 const version = parts[1].replace('v', '');
@@ -135,8 +144,46 @@ document.addEventListener('DOMContentLoaded', function() {
             filePreview.style.display = 'none';
             fileName.textContent = '';
             fileSize.textContent = '';
+            progressBar.style.display = 'none';
+            progressBarInner.style.width = '0%';
+            progressText.textContent = '0%';
         }
     }
+    
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.style.display = 'block';
+                progressBarInner.style.width = percentComplete + '%';
+                progressText.textContent = Math.round(percentComplete) + '%';
+            }
+        });
+        
+        xhr.addEventListener('load', function() {
+            if (xhr.status === 200) {
+                window.location.href = xhr.responseURL;
+            } else {
+                alert('Ошибка при загрузке файла');
+                progressBar.style.display = 'none';
+            }
+        });
+        
+        xhr.addEventListener('error', function() {
+            alert('Ошибка при загрузке файла');
+            progressBar.style.display = 'none';
+        });
+        
+        xhr.open('POST', uploadForm.action);
+        xhr.send(formData);
+        
+        submitBtn.disabled = true;
+    });
     
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
@@ -228,6 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-bottom: 10px;
 }
 
 .selected-file i {
@@ -249,6 +297,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .btn-clear:hover {
     color: var(--danger-color-hover);
+}
+
+.progress {
+    height: 20px;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    line-height: 20px;
+    color: var(--text-color);
 }
 
 .form-group {
