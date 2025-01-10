@@ -10,6 +10,8 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 from sqlalchemy import or_
 from datetime import datetime
+import json
+import shutil
 
 main = Blueprint('main', __name__)
 auth = Blueprint('auth', __name__)
@@ -590,6 +592,46 @@ def logout():
     logout_user()
     return redirect(url_for('auth.login'))
 
+@main.route('/application/<int:id>/temp_upload', methods=['POST'])
+@login_required
+def temp_upload_version(id):
+    try:
+        application = Application.query.get_or_404(id)
+        file = request.files['file']
+        
+        if not file:
+            return jsonify({'error': 'Файл не найден'}), 400
+            
+        # Проверяем размер файла
+        if file.content_length > Config.MAX_FILE_SIZE:
+            return jsonify({'error': f'Файл превышает максимальный размер ({Config.MAX_FILE_SIZE / (1024*1024):.0f} MB)'}), 400
+        
+        filename = secure_filename(file.filename)
+        package_name, version_number, branch = ApkVersion.parse_filename(filename)
+        
+        if not package_name or package_name != application.package_name:
+            return jsonify({'error': f'Файл не соответствует формату: {application.package_name}-vX.X.X-branch.apk'}), 400
+        
+        # Создаем временную директорию, если её нет
+        temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
+        if not os.path.exists(temp_folder):
+            os.makedirs(temp_folder)
+        
+        # Сохраняем файл во временную директорию
+        temp_path = os.path.join(temp_folder, filename)
+        file.save(temp_path)
+        
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'version_number': version_number,
+            'branch': branch,
+            'file_size': os.path.getsize(temp_path)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @main.route('/application/<int:id>/batch_upload', methods=['GET', 'POST'])
 @login_required
 def batch_upload_versions(id):
@@ -599,31 +641,16 @@ def batch_upload_versions(id):
         
         if form.validate_on_submit():
             uploaded_versions = []
-            files = form.apk_files.data
+            temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
             
-            # Проверяем количество файлов
-            if len(files) > Config.MAX_FILES_COUNT:
-                flash(f'Превышено максимальное количество файлов ({Config.MAX_FILES_COUNT})')
-                return redirect(request.url)
+            # Получаем информацию о версиях из формы
+            versions_info = request.form.getlist('versions_info')
             
-            # Проверяем общий размер файлов
-            total_size = sum(f.content_length or 0 for f in files)
-            if total_size > Config.MAX_CONTENT_LENGTH:
-                flash(f'Превышен максимальный общий размер файлов ({Config.MAX_CONTENT_LENGTH / (1024*1024):.0f} MB)')
-                return redirect(request.url)
-            
-            for file in files:
-                # Проверяем размер каждого файла
-                if file.content_length > Config.MAX_FILE_SIZE:
-                    flash(f'Файл {file.filename} превышает максимальный размер ({Config.MAX_FILE_SIZE / (1024*1024):.0f} MB)')
-                    continue
-                
-                filename = secure_filename(file.filename)
-                package_name, version_number, branch = ApkVersion.parse_filename(filename)
-                
-                if not package_name or package_name != application.package_name:
-                    flash(f'Файл {filename} не соответствует формату: {application.package_name}-vX.X.X-branch.apk')
-                    continue
+            for version_info in versions_info:
+                info = json.loads(version_info)
+                filename = info['filename']
+                version_number = info['version_number']
+                branch = info['branch']
                 
                 # Проверяем существование версии
                 existing_version = ApkVersion.query.filter_by(
@@ -636,39 +663,31 @@ def batch_upload_versions(id):
                     flash(f'Версия {version_number} ({branch}) уже существует')
                     continue
                 
-                # Создаем директорию для загрузок, если её нет
-                if not os.path.exists(Config.UPLOAD_FOLDER):
-                    try:
-                        os.makedirs(Config.UPLOAD_FOLDER)
-                    except Exception as e:
-                        flash(f'Ошибка при создании директории для загрузок: {str(e)}')
-                        continue
+                # Перемещаем файл из временной директории
+                temp_path = os.path.join(temp_folder, filename)
+                final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
                 
-                file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-                try:
-                    file.save(file_path)
+                if os.path.exists(temp_path):
+                    os.rename(temp_path, final_path)
                     
                     version = ApkVersion(
                         application_id=application.id,
                         version_number=version_number,
                         branch=branch,
                         filename=filename,
-                        file_size=os.path.getsize(file_path),
+                        file_size=os.path.getsize(final_path),
                         uploader=current_user
                     )
                     db.session.add(version)
                     uploaded_versions.append(version)
-                    
-                except Exception as e:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                    flash(f'Ошибка при загрузке файла {filename}: {str(e)}')
-                    print(f'Error uploading file {filename}: {str(e)}')
-                    continue
             
             if uploaded_versions:
                 try:
                     db.session.commit()
+                    
+                    # Очищаем временную директорию
+                    if os.path.exists(temp_folder):
+                        shutil.rmtree(temp_folder)
                     
                     # Логируем пакетную загрузку
                     UserActionLog.log_action(
@@ -690,7 +709,7 @@ def batch_upload_versions(id):
                     )
                     
                     flash(f'Загружено {len(uploaded_versions)} версий')
-                    return redirect(url_for('main.batch_edit_versions', id=application.id))
+                    return redirect(url_for('main.application_details', id=application.id))
                 except Exception as e:
                     db.session.rollback()
                     flash(f'Ошибка при сохранении версий: {str(e)}')
@@ -703,7 +722,7 @@ def batch_upload_versions(id):
     except Exception as e:
         flash(f'Ошибка: {str(e)}')
         print(f'Error in batch_upload_versions route: {str(e)}')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.application_details', id=id))
 
 @main.route('/application/<int:id>/batch_edit', methods=['GET', 'POST'])
 @login_required

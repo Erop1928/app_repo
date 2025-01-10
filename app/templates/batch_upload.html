@@ -36,6 +36,10 @@
             </div>
 
             <div id="fileList" class="file-list"></div>
+            
+            <div id="versionsInfo" class="versions-info">
+                <!-- Здесь будет информация о версиях -->
+            </div>
 
             <div class="form-actions">
                 {{ form.submit(class="btn btn-primary", id="submitBtn") }}
@@ -225,242 +229,290 @@
     margin: 5px 0;
     font-size: 0.9em;
 }
+
+.versions-info {
+    margin: 20px 0;
+    text-align: left;
+}
+
+.version-item {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.version-item .file-name {
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.version-item label {
+    display: block;
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-item input {
+    width: 100%;
+    padding: 8px;
+    margin: 5px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+    color: var(--text-color);
+}
+
+.version-item input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+}
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    const fileList = document.getElementById('fileList');
-    const form = document.getElementById('uploadForm');
-    const submitBtn = document.getElementById('submitBtn');
-    
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-    
-    function validateFile(file) {
-        // Проверяем расширение файла
-        if (!file.name.toLowerCase().endsWith('.apk')) {
-            alert('Можно загружать только APK файлы');
-            return false;
+(function() {
+    const CONFIG = {
+        MAX_FILE_SIZE: {{ config.MAX_FILE_SIZE }},
+        MAX_FILES_COUNT: {{ config.MAX_FILES_COUNT }},
+        MAX_CONTENT_LENGTH: {{ config.MAX_CONTENT_LENGTH }},
+        PACKAGE_NAME: '{{ application.package_name }}',
+        APPLICATION_ID: {{ application.id }}
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const versionsInfo = document.getElementById('versionsInfo');
+        const form = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        // Хранилище для информации о загруженных файлах
+        const uploadedFiles = new Map();
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
-        // Проверяем формат имени файла
-        const packageName = '{{ application.package_name }}';
-        const fileNamePattern = new RegExp(`^${packageName}-v[\\d\\.]+(-[\\w]+)?\\.apk$`);
-        if (!fileNamePattern.test(file.name)) {
-            alert(`Имя файла должно соответствовать формату: ${packageName}-vX.X.X-branch.apk`);
-            return false;
-        }
-        
-        // Проверяем размер файла
-        const maxFileSize = {{ config.MAX_FILE_SIZE }};
-        if (file.size > maxFileSize) {
-            alert(`Файл ${file.name} превышает максимальный размер (${formatFileSize(maxFileSize)})`);
-            return false;
-        }
-        
-        return true;
-    }
-    
-    function validateFiles(files) {
-        const maxFiles = {{ config.MAX_FILES_COUNT }};
-        const maxTotalSize = {{ config.MAX_CONTENT_LENGTH }};
-        
-        if (files.length > maxFiles) {
-            alert(`Превышено максимальное количество файлов (${maxFiles})`);
-            return false;
-        }
-        
-        let totalSize = 0;
-        for (const file of files) {
-            if (!validateFile(file)) {
+        function validateFile(file) {
+            if (!file.name.toLowerCase().endsWith('.apk')) {
+                alert('Можно загружать только APK файлы');
                 return false;
             }
-            totalSize += file.size;
+            
+            const fileNamePattern = new RegExp(`^${CONFIG.PACKAGE_NAME}-v[\\d\\.]+(-[\\w]+)?\\.apk$`);
+            if (!fileNamePattern.test(file.name)) {
+                alert(`Имя файла должно соответствовать формату: ${CONFIG.PACKAGE_NAME}-vX.X.X-branch.apk`);
+                return false;
+            }
+            
+            if (file.size > CONFIG.MAX_FILE_SIZE) {
+                alert(`Файл ${file.name} превышает максимальный размер (${formatFileSize(CONFIG.MAX_FILE_SIZE)})`);
+                return false;
+            }
+            
+            return true;
         }
         
-        if (totalSize > maxTotalSize) {
-            alert(`Превышен максимальный общий размер файлов (${formatFileSize(maxTotalSize)})`);
-            return false;
+        function validateFiles(files) {
+            if (files.length > CONFIG.MAX_FILES_COUNT) {
+                alert(`Превышено максимальное количество файлов (${CONFIG.MAX_FILES_COUNT})`);
+                return false;
+            }
+            
+            let totalSize = 0;
+            for (const file of files) {
+                if (!validateFile(file)) {
+                    return false;
+                }
+                totalSize += file.size;
+            }
+            
+            if (totalSize > CONFIG.MAX_CONTENT_LENGTH) {
+                alert(`Превышен максимальный общий размер файлов (${formatFileSize(CONFIG.MAX_CONTENT_LENGTH)})`);
+                return false;
+            }
+            
+            return true;
         }
         
-        return true;
-    }
-    
-    function addFileToList(file) {
-        if (!validateFile(file)) return false;
-        
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.innerHTML = 
-            '<i class="fas fa-file-archive"></i>' +
-            '<div class="file-info">' +
-                '<div class="file-name">' + file.name + '</div>' +
-                '<div class="file-meta">' + formatFileSize(file.size) + '</div>' +
-                '<div class="progress-bar-container">' +
-                    '<div class="progress-bar" style="width: 0%"></div>' +
-                    '<span class="progress-text">0%</span>' +
-                '</div>' +
-            '</div>' +
-            '<button type="button" class="remove-file">' +
-                '<i class="fas fa-times"></i>' +
-            '</button>';
-        
-        fileItem.querySelector('.remove-file').addEventListener('click', () => {
-            fileItem.remove();
-            updateSubmitButton();
-            updateFileInput();
-        });
-        
-        fileList.appendChild(fileItem);
-        return true;
-    }
-    
-    function updateProgress(fileItem, progress) {
-        const progressBar = fileItem.querySelector('.progress-bar');
-        const progressText = fileItem.querySelector('.progress-text');
-        progressBar.style.width = `${progress}%`;
-        progressText.textContent = `${Math.round(progress)}%`;
-    }
-    
-    function uploadFiles(files) {
-        const formData = new FormData(form);
-        
-        // Отключаем кнопку отправки
-        submitBtn.disabled = true;
-        
-        // Создаем и настраиваем XMLHttpRequest
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action, true);
-        
-        // Обработчик прогресса загрузки
-        xhr.upload.onprogress = function(e) {
-            if (e.lengthComputable) {
-                const totalProgress = (e.loaded / e.total) * 100;
-                const fileItems = fileList.querySelectorAll('.file-item');
-                
-                // Обновляем прогресс для каждого файла
-                fileItems.forEach(fileItem => {
-                    updateProgress(fileItem, totalProgress);
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`/application/${CONFIG.APPLICATION_ID}/temp_upload`, {
+                    method: 'POST',
+                    body: formData
                 });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Ошибка загрузки файла');
+                }
+                
+                return result;
+            } catch (error) {
+                throw new Error(`Ошибка загрузки файла ${file.name}: ${error.message}`);
             }
-        };
-        
-        // Обработчик завершения загрузки
-        xhr.onload = function() {
-            if (xhr.status === 200) {
-                // Перенаправляем на страницу с результатом
-                window.location.href = xhr.responseURL;
-            } else {
-                alert('Ошибка при загрузке файлов');
-                submitBtn.disabled = false;
-            }
-        };
-        
-        // Обработчик ошибки
-        xhr.onerror = function() {
-            alert('Ошибка при загрузке файлов');
-            submitBtn.disabled = false;
-        };
-        
-        // Отправляем данные
-        xhr.send(formData);
-    }
-    
-    function updateSubmitButton() {
-        submitBtn.disabled = fileList.children.length === 0;
-    }
-    
-    function updateFileInput() {
-        const dt = new DataTransfer();
-        const files = Array.from(fileInput.files);
-        const currentFileNames = Array.from(fileList.children).map(item => 
-            item.querySelector('.file-name').textContent
-        );
-        
-        files.forEach(file => {
-            if (currentFileNames.includes(file.name)) {
-                dt.items.add(file);
-            }
-        });
-        
-        fileInput.files = dt.files;
-    }
-    
-    fileInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        if (!validateFiles(files)) {
-            fileInput.value = '';
-            return;
         }
         
-        let validFiles = 0;
-        files.forEach(file => {
-            if (addFileToList(file)) {
-                validFiles++;
+        function createVersionInfo(fileInfo) {
+            const versionItem = document.createElement('div');
+            versionItem.className = 'version-item';
+            versionItem.innerHTML = `
+                <input type="hidden" name="versions_info" value='${JSON.stringify(fileInfo)}'>
+                <div class="file-name">${fileInfo.filename}</div>
+                <label>Версия:</label>
+                <input type="text" class="version-input" value="${fileInfo.version_number}" 
+                       data-filename="${fileInfo.filename}">
+                <label>Ветка:</label>
+                <input type="text" class="branch-input" value="${fileInfo.branch}"
+                       data-filename="${fileInfo.filename}">
+            `;
+            
+            const versionInput = versionItem.querySelector('.version-input');
+            const branchInput = versionItem.querySelector('.branch-input');
+            const hiddenInput = versionItem.querySelector('input[name="versions_info"]');
+            
+            function updateVersionInfo() {
+                const updatedInfo = {
+                    ...fileInfo,
+                    version_number: versionInput.value,
+                    branch: branchInput.value
+                };
+                hiddenInput.value = JSON.stringify(updatedInfo);
             }
-        });
-        
-        if (validFiles === 0) {
-            fileInput.value = '';
+            
+            versionInput.addEventListener('change', updateVersionInfo);
+            branchInput.addEventListener('change', updateVersionInfo);
+            
+            return versionItem;
         }
         
-        updateSubmitButton();
-    });
-    
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        
-        const files = Array.from(e.dataTransfer.files);
-        if (!validateFiles(files)) {
-            return;
+        async function addFileToList(file) {
+            if (!validateFile(file)) return false;
+            
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = 
+                '<i class="fas fa-file-archive"></i>' +
+                '<div class="file-info">' +
+                    '<div class="file-name">' + file.name + '</div>' +
+                    '<div class="file-meta">' + formatFileSize(file.size) + '</div>' +
+                    '<div class="progress-bar-container">' +
+                        '<div class="progress-bar" style="width: 0%"></div>' +
+                        '<span class="progress-text">0%</span>' +
+                    '</div>' +
+                '</div>' +
+                '<button type="button" class="remove-file">' +
+                    '<i class="fas fa-times"></i>' +
+                '</button>';
+            
+            fileList.appendChild(fileItem);
+            
+            try {
+                const result = await uploadFile(file);
+                
+                const progressBar = fileItem.querySelector('.progress-bar');
+                const progressText = fileItem.querySelector('.progress-text');
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                
+                const versionItem = createVersionInfo(result);
+                versionsInfo.appendChild(versionItem);
+                
+                uploadedFiles.set(file.name, result);
+                
+                const removeButton = fileItem.querySelector('.remove-file');
+                removeButton.addEventListener('click', () => {
+                    fileItem.remove();
+                    const versionItems = versionsInfo.querySelectorAll('.version-item');
+                    for (const item of versionItems) {
+                        if (item.querySelector('.file-name').textContent === file.name) {
+                            item.remove();
+                            break;
+                        }
+                    }
+                    uploadedFiles.delete(file.name);
+                    updateSubmitButton();
+                });
+                
+                return true;
+            } catch (error) {
+                alert(error.message);
+                fileItem.remove();
+                return false;
+            }
         }
         
-        let validFiles = 0;
-        files.forEach(file => {
-            if (addFileToList(file)) {
-                validFiles++;
-            }
-        });
+        function updateSubmitButton() {
+            submitBtn.disabled = uploadedFiles.size === 0;
+        }
         
-        if (validFiles > 0) {
-            const dt = new DataTransfer();
-            files.forEach(file => dt.items.add(file));
-            fileInput.files = dt.files;
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (!validateFiles(files)) {
+                fileInput.value = '';
+                return;
+            }
+            
+            for (const file of files) {
+                await addFileToList(file);
+            }
+            
             updateSubmitButton();
-        }
-    });
+        });
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
 
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const files = Array.from(fileInput.files);
-        if (files.length === 0) {
-            alert('Пожалуйста, выберите хотя бы один APK файл');
-            return;
-        }
-        
-        uploadFiles(files);
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files);
+            if (!validateFiles(files)) {
+                return;
+            }
+            
+            for (const file of files) {
+                await addFileToList(file);
+            }
+            
+            updateSubmitButton();
+        });
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            if (uploadedFiles.size === 0) {
+                alert('Пожалуйста, выберите хотя бы один APK файл');
+                return;
+            }
+            
+            form.submit();
+        });
     });
-});
+})();
 </script>
 {% endblock %} 
