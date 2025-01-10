@@ -61,8 +61,27 @@ class Application(db.Model):
     description = db.Column(db.Text)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
-    versions = db.relationship('ApkVersion', backref='application', lazy=True,
-                             order_by='ApkVersion.version_number.desc()')
+    versions = db.relationship('ApkVersion', backref='application', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def get_latest_release(self):
+        """Получает последнюю стабильную версию приложения"""
+        return self.versions.filter_by(is_stable=True).order_by(ApkVersion.upload_date.desc()).first() or \
+               self.versions.order_by(ApkVersion.upload_date.desc()).first()
+    
+    def get_latest_version(self, branch=None):
+        """Получает последнюю версию приложения для указанной ветки"""
+        query = self.versions
+        if branch:
+            query = query.filter_by(branch=branch)
+        return query.order_by(ApkVersion.upload_date.desc()).first()
+    
+    def get_version_count(self):
+        """Получает общее количество версий"""
+        return self.versions.count()
+    
+    def get_total_downloads(self):
+        """Получает общее количество загрузок всех версий"""
+        return db.session.query(db.func.sum(ApkVersion.downloads)).filter_by(application_id=self.id).scalar() or 0
 
 class ApkVersion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
