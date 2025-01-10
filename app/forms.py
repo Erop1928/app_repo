@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, FileField, BooleanField, MultipleFileField, SelectMultipleField
-from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional
+from wtforms.validators import DataRequired, Length, EqualTo, Optional
 
 class LoginForm(FlaskForm):
     username = StringField('Имя пользователя', validators=[DataRequired()])
@@ -40,7 +40,6 @@ class AddFlagForm(FlaskForm):
 
 class UserForm(FlaskForm):
     username = StringField('Имя пользователя', validators=[DataRequired(), Length(max=64)])
-    email = StringField('Email', validators=[Optional(), Email(), Length(max=120)])
     password = PasswordField('Пароль', validators=[
         Optional(),
         Length(min=6, message='Пароль должен содержать минимум 6 символов')

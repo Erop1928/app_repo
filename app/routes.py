@@ -48,14 +48,9 @@ def new_user():
         if User.query.filter_by(username=form.username.data).first():
             flash('Пользователь с таким именем уже существует')
             return redirect(url_for('admin.new_user'))
-            
-        if form.email.data and User.query.filter_by(email=form.email.data).first():
-            flash('Пользователь с таким email уже существует')
-            return redirect(url_for('admin.new_user'))
         
         user = User(
             username=form.username.data,
-            email=form.email.data,
             is_active=form.is_active.data
         )
         if form.password.data:
@@ -77,7 +72,6 @@ def new_user():
             None,
             {
                 'username': user.username,
-                'email': user.email,
                 'is_active': user.is_active,
                 'roles': [role.name for role in user.roles]
             }
@@ -100,7 +94,6 @@ def edit_user(id):
         # Сохраняем старые значения для лога
         old_value = {
             'username': user.username,
-            'email': user.email,
             'is_active': user.is_active,
             'roles': [role.name for role in user.roles]
         }
@@ -112,18 +105,8 @@ def edit_user(id):
         if username_exists:
             flash('Пользователь с таким именем уже существует')
             return redirect(url_for('admin.edit_user', id=id))
-            
-        if form.email.data:
-            email_exists = User.query.filter(
-                User.email == form.email.data,
-                User.id != id
-            ).first()
-            if email_exists:
-                flash('Пользователь с таким email уже существует')
-                return redirect(url_for('admin.edit_user', id=id))
         
         user.username = form.username.data
-        user.email = form.email.data
         user.is_active = form.is_active.data
         
         if form.password.data:
@@ -138,7 +121,6 @@ def edit_user(id):
         # Логируем изменение пользователя
         new_value = {
             'username': user.username,
-            'email': user.email,
             'is_active': user.is_active,
             'roles': [role.name for role in user.roles]
         }
@@ -181,7 +163,7 @@ def delete_user(id):
     db.session.delete(user)
     db.session.commit()
     
-    # Логируем удал��ние пользователя
+    # Логируем удаление пользователя
     UserActionLog.log_action(
         current_user,
         'delete_user',
@@ -264,7 +246,7 @@ def delete_role(id):
         
     db.session.delete(role)
     db.session.commit()
-    flash('Роль у��алена')
+    flash('Роль удалена')
     return redirect(url_for('admin.roles_list'))
 
 @main.route('/')
@@ -666,7 +648,7 @@ def batch_upload_versions(id):
                     flash(f'Файл {filename} не соответствует формату: {application.package_name}-vX.X.X-branch.apk')
                     continue
                 
-                # Проверяем существо��ание версии
+                # Проверяем существование версии
                 existing_version = ApkVersion.query.filter_by(
                     application_id=application.id,
                     version_number=version_number,

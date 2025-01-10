@@ -40,7 +40,7 @@ def init_db():
         db.session.add(user_role)
         
         # Создаем пользователя admin
-        admin = User(username='admin', email='admin@example.com', is_active=True)
+        admin = User(username='admin', is_active=True)
         admin.set_password('admin')
         admin.roles.append(admin_role)
         db.session.add(admin)
@@ -57,7 +57,7 @@ def init_db():
             },
             {
                 'name': 'Приложения партнеров',
-                'description': 'Приложения от партнеров и интег��аторов'
+                'description': 'Приложения от партнеров и интеграторов'
             },
             {
                 'name': 'Debug/SDK',
