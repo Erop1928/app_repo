@@ -87,28 +87,59 @@ restore_backup() {
     local db_backup=$1
     local files_backup=$2
     
+    # Проверяем наличие файлов бэкапа
+    if [ ! -f "$db_backup" ] && [ ! -f "$files_backup" ]; then
+        warning "No backup files found, skipping restore"
+        return 0
+    fi
+    
     log "Restoring from backup..."
     
     # Восстановление базы данных
-    log "Restoring database..."
-    if docker-compose exec -T db psql -U postgres -d apk_store -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
-       docker-compose exec -T db psql -U postgres apk_store < "$db_backup"; then
-        log "Database restored successfully"
+    if [ -f "$db_backup" ]; then
+        log "Restoring database..."
+        if docker-compose exec -T db psql -U postgres -d apk_store -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
+           docker-compose exec -T db psql -U postgres apk_store < "$db_backup"; then
+            log "Database restored successfully"
+        else
+            error "Failed to restore database"
+            return 1
+        fi
     else
-        error "Failed to restore database"
-        return 1
+        warning "No database backup found, skipping database restore"
     fi
     
     # Восстановление файлов
-    log "Restoring uploads..."
-    if rm -rf uploads/* && tar -xzf "$files_backup" -C .; then
-        log "Files restored successfully"
+    if [ -f "$files_backup" ]; then
+        log "Restoring uploads..."
+        if rm -rf uploads/* && tar -xzf "$files_backup" -C .; then
+            log "Files restored successfully"
+        else
+            error "Failed to restore files"
+            return 1
+        fi
     else
-        error "Failed to restore files"
-        return 1
+        warning "No files backup found, skipping files restore"
     fi
     
     log "Restore completed successfully"
+    return 0
+}
+
+# Функция для инициализации Flask-Migrate
+init_flask_migrate() {
+    log "Initializing Flask-Migrate..."
+    
+    # Инициализируем миграции
+    if ! docker-compose exec -T web flask db init; then
+        warning "Flask db init failed, migrations may already exist"
+    fi
+    
+    # Создаем первую миграцию
+    if ! docker-compose exec -T web flask db migrate -m "Initial migration"; then
+        warning "Flask db migrate failed, schema may already exist"
+    fi
+    
     return 0
 }
 
@@ -168,6 +199,16 @@ main() {
         warning "Attempting to restore from backup..."
         restore_backup "$BACKUP_DB" "$BACKUP_FILES"
         exit 1
+    fi
+    
+    # Инициализируем Flask-Migrate если это первый запуск
+    if [ "$CREATE_DB" = true ]; then
+        if ! init_flask_migrate; then
+            error "Failed to initialize Flask-Migrate"
+            warning "Attempting to restore from backup..."
+            restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+            exit 1
+        fi
     fi
     
     # Применяем миграции базы данных
