@@ -36,10 +36,6 @@
             </div>
 
             <div id="fileList" class="file-list"></div>
-            
-            <div id="versionsInfo" class="versions-info">
-                <!-- Здесь будет информация о версиях -->
-            </div>
 
             <div class="form-actions">
                 {{ form.submit(class="btn btn-primary", id="submitBtn") }}
@@ -48,6 +44,61 @@
         </form>
     </div>
 </div>
+
+<!-- Шаблон для элемента файла -->
+<template id="fileItemTemplate">
+    <div class="file-item">
+        <div class="file-header">
+            <i class="fas fa-file-archive"></i>
+            <div class="file-info">
+                <div class="file-name"></div>
+                <div class="file-meta"></div>
+            </div>
+            <button type="button" class="remove-file">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="file-progress">
+            <div class="progress-bar-container">
+                <div class="progress-bar"></div>
+                <span class="progress-text">0%</span>
+            </div>
+        </div>
+        
+        <div class="version-details">
+            <input type="hidden" name="versions_info">
+            
+            <div class="form-group">
+                <label>Версия:</label>
+                <input type="text" class="form-control version-input" placeholder="X.X.X">
+            </div>
+            
+            <div class="form-group">
+                <label>Ветка:</label>
+                <select class="form-control branch-input">
+                    <option value="release">Release</option>
+                    <option value="debug">Debug</option>
+                    <option value="beta">Beta</option>
+                    <option value="alpha">Alpha</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Список изменений:</label>
+                <textarea class="form-control changelog-input" rows="3" placeholder="Опишите изменения в этой версии..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" class="stable-input">
+                    <span>Стабильная версия</span>
+                </label>
+                <small class="form-text">Отметьте, если это стабильная версия приложения</small>
+            </div>
+        </div>
+    </div>
+</template>
 {% endblock %}
 
 {% block styles %}
@@ -118,17 +169,23 @@
 }
 
 .file-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
     background-color: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
 }
 
-.file-item i {
+.file-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.file-header i {
     color: var(--primary-color);
 }
 
@@ -146,15 +203,18 @@
     color: var(--text-muted);
 }
 
+.file-progress {
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
 .progress-bar-container {
-    width: 100%;
     height: 20px;
-    background-color: var(--bg-color);
+    background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    margin-top: 5px;
-    position: relative;
     overflow: hidden;
+    position: relative;
 }
 
 .progress-bar {
@@ -173,6 +233,54 @@
     font-size: 0.8em;
     font-weight: bold;
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.version-details {
+    padding: 15px;
+}
+
+.version-details .form-group {
+    margin-bottom: 15px;
+}
+
+.version-details label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-details .form-control {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+    color: var(--text-color);
+}
+
+.version-details .form-control:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
+
+.form-text {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-top: 5px;
 }
 
 .remove-file {
@@ -230,54 +338,25 @@
     font-size: 0.9em;
 }
 
-.versions-info {
-    margin: 20px 0;
-    text-align: left;
-}
-
-.version-item {
-    background-color: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 15px;
-    margin-bottom: 10px;
-}
-
-.version-item .file-name {
-    font-size: 1.1em;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.version-item label {
-    display: block;
-    margin-top: 10px;
-    color: var(--text-muted);
-    font-size: 0.9em;
-}
-
-.version-item input {
-    width: 100%;
-    padding: 8px;
-    margin: 5px 0;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background-color: var(--bg-secondary);
-    color: var(--text-color);
-}
-
-.version-item input:focus {
-    border-color: var(--primary-color);
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+@media (max-width: 768px) {
+    .upload-container {
+        padding: 20px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+    }
 }
 </style>
 {% endblock %}
 
 {% block scripts %}
-<script>
-// Определяем глобальную конфигурацию
+{{ super() }}
+<script type="text/javascript">
 window.CONFIG = {
     maxFileSize: {{ config.MAX_FILE_SIZE }},
     maxFilesCount: {{ config.MAX_FILES_COUNT }},
@@ -286,15 +365,16 @@ window.CONFIG = {
     applicationId: {{ application.id }}
 };
 
-// Основной код приложения
 (function() {
+    'use strict';
+    
     document.addEventListener('DOMContentLoaded', function() {
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
-        const versionsInfo = document.getElementById('versionsInfo');
         const form = document.getElementById('uploadForm');
         const submitBtn = document.getElementById('submitBtn');
+        const fileItemTemplate = document.getElementById('fileItemTemplate');
         
         // Хранилище для информации о загруженных файлах
         const uploadedFiles = new Map();
@@ -349,17 +429,91 @@ window.CONFIG = {
             return true;
         }
         
-        async function uploadFile(file, progressCallback) {
+        function parseFileName(filename) {
+            try {
+                const base = filename.replace('.apk', '');
+                const parts = base.split('-');
+                
+                if (parts.length >= 2) {
+                    const version = parts[1].replace('v', '');
+                    const branch = parts.length > 2 ? parts[2] : 'release';
+                    return { version, branch };
+                }
+                return null;
+            } catch (e) {
+                console.error('Error parsing filename:', e);
+                return null;
+            }
+        }
+        
+        function createFileItem(file) {
+            const template = fileItemTemplate.content.cloneNode(true);
+            const fileItem = template.querySelector('.file-item');
+            
+            // Заполняем базовую информацию
+            fileItem.querySelector('.file-name').textContent = file.name;
+            fileItem.querySelector('.file-meta').textContent = formatFileSize(file.size);
+            
+            // Парсим имя файла для предзаполнения полей
+            const fileInfo = parseFileName(file.name);
+            if (fileInfo) {
+                fileItem.querySelector('.version-input').value = fileInfo.version;
+                fileItem.querySelector('.branch-input').value = fileInfo.branch;
+            }
+            
+            // Добавляем обработчики изменений
+            const inputs = fileItem.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('change', () => updateVersionInfo(fileItem));
+            });
+            
+            // Добавляем обработчик удаления
+            const removeButton = fileItem.querySelector('.remove-file');
+            removeButton.addEventListener('click', () => {
+                fileItem.remove();
+                uploadedFiles.delete(file.name);
+                updateSubmitButton();
+            });
+            
+            return fileItem;
+        }
+        
+        function updateVersionInfo(fileItem) {
+            const versionInput = fileItem.querySelector('.version-input');
+            const branchInput = fileItem.querySelector('.branch-input');
+            const changelogInput = fileItem.querySelector('.changelog-input');
+            const stableInput = fileItem.querySelector('.stable-input');
+            const hiddenInput = fileItem.querySelector('input[name="versions_info"]');
+            
+            const fileName = fileItem.querySelector('.file-name').textContent;
+            const fileInfo = uploadedFiles.get(fileName);
+            
+            if (fileInfo) {
+                const updatedInfo = {
+                    ...fileInfo,
+                    version_number: versionInput.value,
+                    branch: branchInput.value,
+                    changelog: changelogInput.value,
+                    is_stable: stableInput.checked
+                };
+                hiddenInput.value = JSON.stringify(updatedInfo);
+            }
+        }
+        
+        async function uploadFile(file, fileItem) {
             const formData = new FormData();
             formData.append('file', file);
             
             try {
                 const xhr = new XMLHttpRequest();
+                const progressBar = fileItem.querySelector('.progress-bar');
+                const progressText = fileItem.querySelector('.progress-text');
                 
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
                         const percentComplete = (e.loaded / e.total) * 100;
-                        progressCallback(percentComplete);
+                        progressBar.style.width = percentComplete + '%';
+                        progressText.textContent = Math.round(percentComplete) + '%';
                     }
                 };
                 
@@ -390,97 +544,33 @@ window.CONFIG = {
                 xhr.open('POST', `/application/${window.CONFIG.applicationId}/temp_upload`);
                 xhr.send(formData);
                 
-                return await uploadPromise;
+                const result = await uploadPromise;
+                
+                // Обновляем информацию о версии
+                const versionInput = fileItem.querySelector('.version-input');
+                const branchInput = fileItem.querySelector('.branch-input');
+                const hiddenInput = fileItem.querySelector('input[name="versions_info"]');
+                
+                versionInput.value = result.version_number;
+                branchInput.value = result.branch;
+                hiddenInput.value = JSON.stringify(result);
+                
+                uploadedFiles.set(file.name, result);
+                return true;
                 
             } catch (error) {
                 throw new Error(`Ошибка загрузки файла ${file.name}: ${error.message}`);
             }
         }
         
-        function createVersionInfo(fileInfo) {
-            const versionItem = document.createElement('div');
-            versionItem.className = 'version-item';
-            versionItem.innerHTML = `
-                <input type="hidden" name="versions_info" value='${JSON.stringify(fileInfo)}'>
-                <div class="file-name">${fileInfo.filename}</div>
-                <label>Версия:</label>
-                <input type="text" class="version-input" value="${fileInfo.version_number}" 
-                       data-filename="${fileInfo.filename}">
-                <label>Ветка:</label>
-                <input type="text" class="branch-input" value="${fileInfo.branch}"
-                       data-filename="${fileInfo.filename}">
-            `;
-            
-            const versionInput = versionItem.querySelector('.version-input');
-            const branchInput = versionItem.querySelector('.branch-input');
-            const hiddenInput = versionItem.querySelector('input[name="versions_info"]');
-            
-            function updateVersionInfo() {
-                const updatedInfo = {
-                    ...fileInfo,
-                    version_number: versionInput.value,
-                    branch: branchInput.value
-                };
-                hiddenInput.value = JSON.stringify(updatedInfo);
-            }
-            
-            versionInput.addEventListener('change', updateVersionInfo);
-            branchInput.addEventListener('change', updateVersionInfo);
-            
-            return versionItem;
-        }
-        
         async function addFileToList(file) {
             if (!validateFile(file)) return false;
             
-            const fileItem = document.createElement('div');
-            fileItem.className = 'file-item';
-            fileItem.innerHTML = 
-                '<i class="fas fa-file-archive"></i>' +
-                '<div class="file-info">' +
-                    '<div class="file-name">' + file.name + '</div>' +
-                    '<div class="file-meta">' + formatFileSize(file.size) + '</div>' +
-                    '<div class="progress-bar-container">' +
-                        '<div class="progress-bar" style="width: 0%"></div>' +
-                        '<span class="progress-text">0%</span>' +
-                    '</div>' +
-                '</div>' +
-                '<button type="button" class="remove-file">' +
-                    '<i class="fas fa-times"></i>' +
-                '</button>';
-            
+            const fileItem = createFileItem(file);
             fileList.appendChild(fileItem);
             
             try {
-                const progressBar = fileItem.querySelector('.progress-bar');
-                const progressText = fileItem.querySelector('.progress-text');
-                
-                const updateProgress = (percent) => {
-                    progressBar.style.width = percent + '%';
-                    progressText.textContent = Math.round(percent) + '%';
-                };
-                
-                const result = await uploadFile(file, updateProgress);
-                
-                const versionItem = createVersionInfo(result);
-                versionsInfo.appendChild(versionItem);
-                
-                uploadedFiles.set(file.name, result);
-                
-                const removeButton = fileItem.querySelector('.remove-file');
-                removeButton.addEventListener('click', () => {
-                    fileItem.remove();
-                    const versionItems = versionsInfo.querySelectorAll('.version-item');
-                    for (const item of versionItems) {
-                        if (item.querySelector('.file-name').textContent === file.name) {
-                            item.remove();
-                            break;
-                        }
-                    }
-                    uploadedFiles.delete(file.name);
-                    updateSubmitButton();
-                });
-                
+                await uploadFile(file, fileItem);
                 return true;
             } catch (error) {
                 alert(error.message);
