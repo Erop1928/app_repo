@@ -17,9 +17,9 @@ class Config:
         os.path.join(basedir, 'uploads')
     
     # Настройки загрузки файлов
-    MAX_CONTENT_LENGTH = 1024 * 1024 * 1024  # 1 GB
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024 * 1024  # 5 GB
     MAX_FILES_COUNT = 50  # Максимальное количество файлов за раз
-    MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB на файл
+    MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB на файл
     
     # Настройки одноразовых ссылок
     HOST_URL = os.environ.get('HOST_URL', 'http://192.168.77.171:5000')
