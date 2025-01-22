@@ -26,7 +26,7 @@
             <p class="upload-format">Формат: {{ application.package_name }}-vX.X.X-branch.apk</p>
         </div>
         
-        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+        <form method="POST" enctype="multipart/form-data" id="uploadForm" action="{{ url_for('main.batch_upload', id=application.id) }}">
             {{ form.hidden_tag() }}
             
             <div class="form-group">
@@ -38,9 +38,10 @@
             <div id="fileList" class="file-list"></div>
 
             <input type="hidden" name="versions_data" id="versionsData">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div class="form-actions">
-                {{ form.submit(class="btn btn-primary", id="submitBtn") }}
+                {{ form.submit(class="btn btn-primary", id="submitBtn", disabled=True) }}
                 <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
             </div>
         </form>
@@ -625,6 +626,7 @@ window.CONFIG = {
 
         form.addEventListener('submit', function(e) {
             e.preventDefault();
+            console.log('Form submit event triggered');
             
             if (uploadedFiles.size === 0) {
                 alert('Пожалуйста, выберите хотя бы один APK файл');
@@ -634,6 +636,7 @@ window.CONFIG = {
             // Собираем информацию о версиях
             const versionsData = [];
             const fileItems = document.querySelectorAll('.file-item');
+            console.log('Found file items:', fileItems.length);
             
             fileItems.forEach(function(fileItem) {
                 const versionInput = fileItem.querySelector('.version-input');
@@ -643,22 +646,36 @@ window.CONFIG = {
                 const fileName = fileItem.querySelector('.file-name').textContent;
                 
                 const fileInfo = uploadedFiles.get(fileName);
+                console.log('Processing file:', fileName, fileInfo);
+                
                 if (fileInfo) {
                     const versionInfo = {
-                        ...fileInfo,
+                        temp_path: fileInfo.temp_path,
+                        filename: fileName,
                         version_number: versionInput.value,
                         branch: branchInput.value,
                         changelog: changelogInput.value,
                         is_stable: stableInput.checked
                     };
                     versionsData.push(versionInfo);
+                    console.log('Added version info:', versionInfo);
                 }
             });
 
+            console.log('Collected versions data:', versionsData);
+
             // Обновляем скрытое поле с данными версий
             versionsDataInput.value = JSON.stringify(versionsData);
+            console.log('Updated versions_data input:', versionsDataInput.value);
+            
+            // Отключаем кнопку отправки
+            submitBtn.disabled = true;
+            
+            // Добавляем индикатор загрузки
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
             
             // Отправляем форму
+            console.log('Submitting form...');
             form.submit();
         });
     });
