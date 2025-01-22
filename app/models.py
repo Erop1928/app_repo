@@ -24,9 +24,10 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     roles = db.relationship('Role', secondary=user_roles, lazy='subquery',
-                          backref=db.backref('users', lazy=True))
+                          back_populates='users')
     uploaded_versions = db.relationship('ApkVersion', back_populates='uploader', lazy='dynamic')
     flags_created = db.relationship('VersionFlag', back_populates='created_by', lazy='dynamic')
+    created_links = db.relationship('OneTimeDownloadLink', back_populates='created_by', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -49,12 +50,14 @@ class Role(db.Model):
     name = db.Column(db.String(64), unique=True, nullable=False)
     description = db.Column(db.String(255))
     permissions = db.Column(JSON, default=list)
+    users = db.relationship('User', secondary=user_roles, lazy='subquery',
+                          back_populates='roles')
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
     description = db.Column(db.Text)
-    applications = db.relationship('Application', backref='category', lazy=True)
+    applications = db.relationship('Application', back_populates='category', lazy=True)
 
 class Application(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -63,6 +66,7 @@ class Application(db.Model):
     description = db.Column(db.Text)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
+    category = db.relationship('Category', back_populates='applications')
     versions = db.relationship('ApkVersion', back_populates='application', lazy='dynamic', cascade='all, delete-orphan')
     
     def get_versions(self):
@@ -199,8 +203,8 @@ class OneTimeDownloadLink(db.Model):
     used_at = db.Column(db.DateTime)
     used_by_ip = db.Column(db.String(45))
     
-    version = db.relationship('ApkVersion', backref=db.backref('download_links', lazy=True))
-    created_by = db.relationship('User', backref=db.backref('created_links', lazy=True))
+    version = db.relationship('ApkVersion', back_populates='download_links')
+    created_by = db.relationship('User', back_populates='created_links')
     
     def is_valid(self):
         return not self.is_used and datetime.utcnow() <= self.expires_at
