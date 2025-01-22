@@ -37,6 +37,8 @@
 
             <div id="fileList" class="file-list"></div>
 
+            <input type="hidden" name="versions_data" id="versionsData">
+
             <div class="form-actions">
                 {{ form.submit(class="btn btn-primary", id="submitBtn") }}
                 <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
@@ -370,6 +372,7 @@ window.CONFIG = {
         const form = document.getElementById('uploadForm');
         const submitBtn = document.getElementById('submitBtn');
         const fileItemTemplate = document.getElementById('fileItemTemplate');
+        const versionsDataInput = document.getElementById('versionsData');
         
         // Хранилище для информации о загруженных файлах
         const uploadedFiles = new Map();
@@ -620,14 +623,42 @@ window.CONFIG = {
             await handleFiles(files);
         });
 
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', function(e) {
             e.preventDefault();
             
             if (uploadedFiles.size === 0) {
                 alert('Пожалуйста, выберите хотя бы один APK файл');
                 return;
             }
+
+            // Собираем информацию о версиях
+            const versionsData = [];
+            const fileItems = document.querySelectorAll('.file-item');
             
+            fileItems.forEach(function(fileItem) {
+                const versionInput = fileItem.querySelector('.version-input');
+                const branchInput = fileItem.querySelector('.branch-input');
+                const changelogInput = fileItem.querySelector('.changelog-input');
+                const stableInput = fileItem.querySelector('.stable-input');
+                const fileName = fileItem.querySelector('.file-name').textContent;
+                
+                const fileInfo = uploadedFiles.get(fileName);
+                if (fileInfo) {
+                    const versionInfo = {
+                        ...fileInfo,
+                        version_number: versionInput.value,
+                        branch: branchInput.value,
+                        changelog: changelogInput.value,
+                        is_stable: stableInput.checked
+                    };
+                    versionsData.push(versionInfo);
+                }
+            });
+
+            // Обновляем скрытое поле с данными версий
+            versionsDataInput.value = JSON.stringify(versionsData);
+            
+            // Отправляем форму
             form.submit();
         });
     });
