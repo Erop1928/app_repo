@@ -26,6 +26,7 @@ class User(UserMixin, db.Model):
     roles = db.relationship('Role', secondary=user_roles, lazy='subquery',
                           backref=db.backref('users', lazy=True))
     uploaded_versions = db.relationship('ApkVersion', back_populates='uploader', lazy='dynamic')
+    flags_created = db.relationship('VersionFlag', back_populates='created_by', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -152,7 +153,9 @@ class VersionFlag(db.Model):
     description = db.Column(db.String(255), nullable=False)
     created_date = db.Column(db.DateTime, default=datetime.utcnow)
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_by = db.relationship('User', backref=db.backref('flags_created', lazy=True))
+    
+    version = db.relationship('ApkVersion', back_populates='flags')
+    created_by = db.relationship('User', back_populates='flags_created')
 
 class UserActionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
