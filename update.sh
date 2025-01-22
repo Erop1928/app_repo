@@ -31,25 +31,54 @@ BACKUP_FILES="backups/uploads_backup_$DATE.tar.gz"
 create_backup() {
     log "Creating backup..."
     
-    # Бэкап базы данных
-    log "Creating database backup..."
-    if docker-compose exec -T db pg_dump -U postgres apk_store > "$BACKUP_DB"; then
-        log "Database backup created: $BACKUP_DB"
+    # Проверяем существование базы данных
+    log "Checking database existence..."
+    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw apk_store; then
+        warning "Database 'apk_store' does not exist, skipping database backup"
+        CREATE_DB=true
     else
-        error "Failed to create database backup"
-        return 1
+        # Бэкап базы данных
+        log "Creating database backup..."
+        if docker-compose exec -T db pg_dump -U postgres apk_store > "$BACKUP_DB"; then
+            log "Database backup created: $BACKUP_DB"
+        else
+            error "Failed to create database backup"
+            return 1
+        fi
     fi
     
-    # Бэкап загруженных файлов
-    log "Creating uploads backup..."
-    if tar -czf "$BACKUP_FILES" uploads/; then
-        log "Uploads backup created: $BACKUP_FILES"
+    # Проверяем существование директории uploads
+    if [ -d "uploads" ] && [ "$(ls -A uploads 2>/dev/null)" ]; then
+        # Бэкап загруженных файлов
+        log "Creating uploads backup..."
+        if tar -czf "$BACKUP_FILES" uploads/; then
+            log "Uploads backup created: $BACKUP_FILES"
+        else
+            error "Failed to create uploads backup"
+            return 1
+        fi
     else
-        error "Failed to create uploads backup"
-        return 1
+        warning "Uploads directory is empty or does not exist, skipping files backup"
+        mkdir -p uploads
     fi
     
     log "Backup completed successfully"
+    return 0
+}
+
+# Функция для инициализации базы данных
+init_database() {
+    log "Initializing database..."
+    
+    # Создаем базу данных если она не существует
+    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw apk_store; then
+        log "Creating database 'apk_store'..."
+        if ! docker-compose exec -T db psql -U postgres -c "CREATE DATABASE apk_store;"; then
+            error "Failed to create database"
+            return 1
+        fi
+    fi
+    
     return 0
 }
 
@@ -133,6 +162,14 @@ main() {
     log "Waiting for database to start..."
     sleep 10
     
+    # Инициализируем базу данных если нужно
+    if ! init_database; then
+        error "Failed to initialize database"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
     # Применяем миграции базы данных
     log "Applying database migrations..."
     if ! docker-compose exec -T web flask db upgrade; then
@@ -146,8 +183,8 @@ main() {
     
     # Очистка старых бэкапов (оставляем последние 5)
     log "Cleaning up old backups..."
-    ls -t backups/db_backup_* | tail -n +6 | xargs -r rm
-    ls -t backups/uploads_backup_* | tail -n +6 | xargs -r rm
+    ls -t backups/db_backup_* 2>/dev/null | tail -n +6 | xargs -r rm
+    ls -t backups/uploads_backup_* 2>/dev/null | tail -n +6 | xargs -r rm
 }
 
 # Запускаем основной процесс
