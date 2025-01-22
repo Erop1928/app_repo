@@ -1,113 +1,154 @@
 #!/bin/bash
 
 # Цвета для вывода
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-# Функция для вывода справки
-show_help() {
-    echo "Использование: $0 [опции]"
-    echo "Опции:"
-    echo "  -h, --help          Показать эту справку"
-    echo "  -c, --clean         Полная очистка с удалением томов"
-    echo "  -r, --rebuild       Пересобрать образы"
+# Функция для вывода сообщений
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
 }
 
-# Парсим аргументы
-CLEAN=false
-REBUILD=false
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+}
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -c|--clean)
-            CLEAN=true
-            shift
-            ;;
-        -r|--rebuild)
-            REBUILD=true
-            shift
-            ;;
-        *)
-            echo -e "${RED}Неизвестный параметр: $1${NC}"
-            show_help
-            exit 1
-            ;;
-    esac
-done
+warning() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+}
 
-echo -e "${YELLOW}Начинаем обновление приложения...${NC}"
+# Создаем директорию для бэкапов если её нет
+mkdir -v backups
 
-# Проверяем наличие docker и docker-compose
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker не установлен!${NC}"
-    exit 1
-fi
+# Текущая дата для имени файла
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DB="backups/db_backup_$DATE.sql"
+BACKUP_FILES="backups/uploads_backup_$DATE.tar.gz"
 
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}Docker Compose не установлен!${NC}"
-    exit 1
-fi
+# Функция для создания бэкапа
+create_backup() {
+    log "Creating backup..."
+    
+    # Бэкап базы данных
+    log "Creating database backup..."
+    if docker-compose exec -T db pg_dump -U postgres apk_store > "$BACKUP_DB"; then
+        log "Database backup created: $BACKUP_DB"
+    else
+        error "Failed to create database backup"
+        return 1
+    fi
+    
+    # Бэкап загруженных файлов
+    log "Creating uploads backup..."
+    if tar -czf "$BACKUP_FILES" uploads/; then
+        log "Uploads backup created: $BACKUP_FILES"
+    else
+        error "Failed to create uploads backup"
+        return 1
+    fi
+    
+    log "Backup completed successfully"
+    return 0
+}
 
-# Получаем последние изменения из репозитория
-echo -e "${YELLOW}Получаем последние изменения из репозитория...${NC}"
-git pull
+# Функция для восстановления из бэкапа
+restore_backup() {
+    local db_backup=$1
+    local files_backup=$2
+    
+    log "Restoring from backup..."
+    
+    # Восстановление базы данных
+    log "Restoring database..."
+    if docker-compose exec -T db psql -U postgres -d apk_store -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
+       docker-compose exec -T db psql -U postgres apk_store < "$db_backup"; then
+        log "Database restored successfully"
+    else
+        error "Failed to restore database"
+        return 1
+    fi
+    
+    # Восстановление файлов
+    log "Restoring uploads..."
+    if rm -rf uploads/* && tar -xzf "$files_backup" -C .; then
+        log "Files restored successfully"
+    else
+        error "Failed to restore files"
+        return 1
+    fi
+    
+    log "Restore completed successfully"
+    return 0
+}
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Ошибка при получении изменений из репозитория!${NC}"
-    exit 1
-fi
+# Основной процесс обновления
+main() {
+    log "Starting update process..."
+    
+    # Создаем бэкап перед обновлением
+    if ! create_backup; then
+        error "Backup failed, aborting update"
+        exit 1
+    fi
+    
+    # Получаем последние изменения из git
+    log "Pulling latest changes from git..."
+    if ! git pull; then
+        error "Failed to pull changes from git"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
+    # Останавливаем контейнеры
+    log "Stopping containers..."
+    if ! docker-compose down; then
+        error "Failed to stop containers"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
+    # Пересобираем образы
+    log "Rebuilding containers..."
+    if ! docker-compose build; then
+        error "Failed to build containers"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
+    # Запускаем контейнеры
+    log "Starting containers..."
+    if ! docker-compose up -d; then
+        error "Failed to start containers"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
+    # Ждем, пока база данных запустится
+    log "Waiting for database to start..."
+    sleep 10
+    
+    # Применяем миграции базы данных
+    log "Applying database migrations..."
+    if ! docker-compose exec -T web flask db upgrade; then
+        error "Failed to apply migrations"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
+    fi
+    
+    log "Update completed successfully!"
+    
+    # Очистка старых бэкапов (оставляем последние 5)
+    log "Cleaning up old backups..."
+    ls -t backups/db_backup_* | tail -n +6 | xargs -r rm
+    ls -t backups/uploads_backup_* | tail -n +6 | xargs -r rm
+}
 
-# Останавливаем текущие контейнеры
-echo -e "${YELLOW}Останавливаем текущие контейнеры...${NC}"
-docker-compose down
-
-# Если указан флаг clean, удаляем тома
-if [ "$CLEAN" = true ]; then
-    echo -e "${YELLOW}Удаляем тома...${NC}"
-    docker volume rm $(docker volume ls -q | grep app_repo) || true
-fi
-
-# Если указан флаг rebuild или clean, удаляем старые образы
-if [ "$REBUILD" = true ] || [ "$CLEAN" = true ]; then
-    echo -e "${YELLOW}Удаляем старые образы...${NC}"
-    docker image prune -f
-    BUILD_ARG="--no-cache"
-else
-    BUILD_ARG=""
-fi
-
-# Собираем новые образы
-echo -e "${YELLOW}Собираем новые образы...${NC}"
-docker-compose build $BUILD_ARG
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Ошибка при сборке образов!${NC}"
-    exit 1
-fi
-
-# Запускаем контейнеры
-echo -e "${YELLOW}Запускаем контейнеры...${NC}"
-docker-compose up -d
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Ошибка при запуске контейнеров!${NC}"
-    exit 1
-fi
-
-# Проверяем статус контейнеров
-echo -e "${YELLOW}Проверяем статус контейнеров...${NC}"
-docker-compose ps
-
-# Выводим логи для проверки
-echo -e "${YELLOW}Последние логи:${NC}"
-docker-compose logs --tail=50
-
-echo -e "${GREEN}Обновление завершено успешно!${NC}" 
-
-docker ps
+# Запускаем основной процесс
+main
