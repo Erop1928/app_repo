@@ -26,7 +26,7 @@
             <p class="upload-format">Формат: {{ application.package_name }}-vX.X.X-branch.apk</p>
         </div>
         
-        <form method="POST" enctype="multipart/form-data" id="uploadForm" action="{{ url_for('main.batch_upload', id=application.id) }}">
+        <form method="POST" enctype="multipart/form-data" id="uploadForm" action="{{ url_for('main.batch_upload_versions', id=application.id) }}">
             {{ form.hidden_tag() }}
             
             <div class="form-group">
@@ -37,11 +37,10 @@
 
             <div id="fileList" class="file-list"></div>
 
-            <input type="hidden" name="versions_data" id="versionsData">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
             <div class="form-actions">
-                {{ form.submit(class="btn btn-primary", id="submitBtn", disabled=True) }}
+                <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
                 <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
             </div>
         </form>
@@ -650,8 +649,7 @@ window.CONFIG = {
                 
                 if (fileInfo) {
                     const versionInfo = {
-                        temp_path: fileInfo.temp_path,
-                        filename: fileName,
+                        filename: fileInfo.filename,
                         version_number: versionInput.value,
                         branch: branchInput.value,
                         changelog: changelogInput.value,
@@ -664,15 +662,18 @@ window.CONFIG = {
 
             console.log('Collected versions data:', versionsData);
 
-            // Обновляем скрытое поле с данными версий
+            // Создаем скрытое поле для данных версий
+            const versionsDataInput = document.createElement('input');
+            versionsDataInput.type = 'hidden';
+            versionsDataInput.name = 'versions_info';
             versionsDataInput.value = JSON.stringify(versionsData);
-            console.log('Updated versions_data input:', versionsDataInput.value);
+            form.appendChild(versionsDataInput);
             
             // Отключаем кнопку отправки
             submitBtn.disabled = true;
             
             // Добавляем индикатор загрузки
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
             
             // Отправляем форму
             console.log('Submitting form...');

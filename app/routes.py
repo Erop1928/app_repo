@@ -644,13 +644,14 @@ def batch_upload_versions(id):
             temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
             
             # Получаем информацию о версиях из формы
-            versions_info = request.form.getlist('versions_info')
+            versions_info = json.loads(request.form.get('versions_info', '[]'))
             
-            for version_info in versions_info:
-                info = json.loads(version_info)
+            for info in versions_info:
                 filename = info['filename']
                 version_number = info['version_number']
                 branch = info['branch']
+                changelog = info.get('changelog', '')
+                is_stable = info.get('is_stable', False)
                 
                 # Проверяем существование версии
                 existing_version = ApkVersion.query.filter_by(
@@ -668,12 +669,14 @@ def batch_upload_versions(id):
                 final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
                 
                 if os.path.exists(temp_path):
-                    os.rename(temp_path, final_path)
+                    shutil.move(temp_path, final_path)
                     
                     version = ApkVersion(
                         application_id=application.id,
                         version_number=version_number,
                         branch=branch,
+                        changelog=changelog,
+                        is_stable=is_stable,
                         filename=filename,
                         file_size=os.path.getsize(final_path),
                         uploader=current_user
