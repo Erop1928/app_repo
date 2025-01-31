@@ -130,14 +130,24 @@ restore_backup() {
 init_flask_migrate() {
     log "Initializing Flask-Migrate..."
     
-    # Инициализируем миграции
-    if ! docker-compose exec -T web flask db init; then
-        warning "Flask db init failed, migrations may already exist"
-    fi
+    # Устанавливаем переменные окружения
+    docker-compose exec -T web bash -c "export FLASK_APP=main.py && \
+        pip install flask-migrate && \
+        flask db init && \
+        flask db migrate -m 'Initial migration' && \
+        flask db upgrade"
     
-    # Создаем первую миграцию
-    if ! docker-compose exec -T web flask db migrate -m "Initial migration"; then
-        warning "Flask db migrate failed, schema may already exist"
+    return $?
+}
+
+# Функция для применения миграций
+apply_migrations() {
+    log "Applying database migrations..."
+    
+    # Устанавливаем переменные окружения и применяем миграции
+    if ! docker-compose exec -T web bash -c "export FLASK_APP=main.py && flask db upgrade"; then
+        error "Failed to apply migrations"
+        return 1
     fi
     
     return 0
@@ -209,15 +219,14 @@ main() {
             restore_backup "$BACKUP_DB" "$BACKUP_FILES"
             exit 1
         fi
-    fi
-    
-    # Применяем миграции базы данных
-    log "Applying database migrations..."
-    if ! docker-compose exec -T web flask db upgrade; then
-        error "Failed to apply migrations"
-        warning "Attempting to restore from backup..."
-        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
-        exit 1
+    else
+        # Применяем миграции если база уже существует
+        if ! apply_migrations; then
+            error "Failed to apply migrations"
+            warning "Attempting to restore from backup..."
+            restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+            exit 1
+        fi
     fi
     
     log "Update completed successfully!"
