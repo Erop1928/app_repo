@@ -643,88 +643,122 @@ def batch_upload_versions(id):
             uploaded_versions = []
             temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
             
-            # Получаем информацию о версиях из формы
-            versions_info = json.loads(request.form.get('versions_info', '[]'))
-            
-            for info in versions_info:
-                filename = info['filename']
-                version_number = info['version_number']
-                branch = info['branch']
-                changelog = info.get('changelog', '')
-                is_stable = info.get('is_stable', False)
+            try:
+                # Получаем информацию о версиях из формы
+                versions_info = json.loads(request.form.get('versions_info', '[]'))
+                print(f"Received versions info: {versions_info}")
                 
-                # Проверяем существование версии
-                existing_version = ApkVersion.query.filter_by(
-                    application_id=application.id,
-                    version_number=version_number,
-                    branch=branch
-                ).first()
-                
-                if existing_version:
-                    flash(f'Версия {version_number} ({branch}) уже существует')
-                    continue
-                
-                # Перемещаем файл из временной директории
-                temp_path = os.path.join(temp_folder, filename)
-                final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-                
-                if os.path.exists(temp_path):
-                    shutil.move(temp_path, final_path)
+                for info in versions_info:
+                    filename = info['filename']
+                    version_number = info['version_number']
+                    branch = info['branch']
+                    changelog = info.get('changelog', '')
+                    is_stable = info.get('is_stable', False)
                     
-                    version = ApkVersion(
+                    # Проверяем существование версии
+                    existing_version = ApkVersion.query.filter_by(
                         application_id=application.id,
                         version_number=version_number,
-                        branch=branch,
-                        changelog=changelog,
-                        is_stable=is_stable,
-                        filename=filename,
-                        file_size=os.path.getsize(final_path),
-                        uploader=current_user
-                    )
-                    db.session.add(version)
-                    uploaded_versions.append(version)
-            
-            if uploaded_versions:
-                try:
-                    db.session.commit()
+                        branch=branch
+                    ).first()
                     
-                    # Очищаем временную директорию
-                    if os.path.exists(temp_folder):
-                        shutil.rmtree(temp_folder)
+                    if existing_version:
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return jsonify({
+                                'success': False,
+                                'error': f'Версия {version_number} ({branch}) уже существует'
+                            })
+                        flash(f'Версия {version_number} ({branch}) уже существует')
+                        continue
                     
-                    # Логируем пакетную загрузку
-                    UserActionLog.log_action(
-                        current_user,
-                        'batch_upload_versions',
-                        'application',
-                        application.id,
-                        None,
-                        {
-                            'uploaded_versions': [
-                                {
-                                    'version': v.version_number,
-                                    'branch': v.branch,
-                                    'filename': v.filename
-                                } for v in uploaded_versions
-                            ]
-                        },
-                        f'Загружено {len(uploaded_versions)} версий'
-                    )
+                    # Перемещаем файл из временной директории
+                    temp_path = os.path.join(temp_folder, filename)
+                    final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
                     
-                    flash(f'Загружено {len(uploaded_versions)} версий')
-                    return redirect(url_for('main.application_details', id=application.id))
-                except Exception as e:
-                    db.session.rollback()
-                    flash(f'Ошибка при сохранении версий: {str(e)}')
-                    print(f'Error saving versions: {str(e)}')
-            else:
-                flash('Ни один файл не был загружен')
+                    if os.path.exists(temp_path):
+                        shutil.move(temp_path, final_path)
+                        
+                        version = ApkVersion(
+                            application_id=application.id,
+                            version_number=version_number,
+                            branch=branch,
+                            changelog=changelog,
+                            is_stable=is_stable,
+                            filename=filename,
+                            file_size=os.path.getsize(final_path),
+                            uploader=current_user
+                        )
+                        db.session.add(version)
+                        uploaded_versions.append(version)
+                
+                if uploaded_versions:
+                    try:
+                        db.session.commit()
+                        
+                        # Очищаем временную директорию
+                        if os.path.exists(temp_folder):
+                            shutil.rmtree(temp_folder)
+                        
+                        # Логируем пакетную загрузку
+                        UserActionLog.log_action(
+                            current_user,
+                            'batch_upload_versions',
+                            'application',
+                            application.id,
+                            None,
+                            {
+                                'uploaded_versions': [
+                                    {
+                                        'version': v.version_number,
+                                        'branch': v.branch,
+                                        'filename': v.filename
+                                    } for v in uploaded_versions
+                                ]
+                            },
+                            f'Загружено {len(uploaded_versions)} версий'
+                        )
+                        
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return jsonify({
+                                'success': True,
+                                'redirect_url': url_for('main.application_details', id=application.id)
+                            })
+                            
+                        flash(f'Загружено {len(uploaded_versions)} версий')
+                        return redirect(url_for('main.application_details', id=application.id))
+                        
+                    except Exception as e:
+                        db.session.rollback()
+                        error_msg = f'Ошибка при сохранении версий: {str(e)}'
+                        print(f'Error saving versions: {str(e)}')
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return jsonify({'success': False, 'error': error_msg})
+                        flash(error_msg)
+                else:
+                    error_msg = 'Ни один файл не был загружен'
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({'success': False, 'error': error_msg})
+                    flash(error_msg)
+                    
+            except json.JSONDecodeError as e:
+                error_msg = f'Ошибка при разборе данных версий: {str(e)}'
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'success': False, 'error': error_msg})
+                flash(error_msg)
+                
+            except Exception as e:
+                error_msg = f'Ошибка при обработке загрузки: {str(e)}'
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'success': False, 'error': error_msg})
+                flash(error_msg)
         
         return render_template('batch_upload.html', form=form, application=application)
         
     except Exception as e:
-        flash(f'Ошибка: {str(e)}')
-        print(f'Error in batch_upload_versions route: {str(e)}')
+        error_msg = f'Ошибка: {str(e)}'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'error': error_msg})
+        flash(error_msg)
         return redirect(url_for('main.application_details', id=id))
 
 @main.route('/application/<int:id>/batch_edit', methods=['GET', 'POST'])
