@@ -644,6 +644,11 @@ window.CONFIG = {
                 const stableInput = fileItem.querySelector('.stable-input');
                 const fileName = fileItem.querySelector('.file-name').textContent;
                 
+                if (!versionInput.value) {
+                    alert('Пожалуйста, укажите номер версии для всех файлов');
+                    return;
+                }
+                
                 const fileInfo = uploadedFiles.get(fileName);
                 console.log('Processing file:', fileName, fileInfo);
                 
@@ -660,21 +665,17 @@ window.CONFIG = {
                 }
             });
 
-            console.log('Collected versions data:', versionsData);
-
-            // Удаляем старое поле versions_info если оно есть
-            const oldVersionsData = form.querySelector('input[name="versions_info"]');
-            if (oldVersionsData) {
-                oldVersionsData.remove();
+            if (versionsData.length === 0) {
+                alert('Нет данных для сохранения');
+                return;
             }
 
-            // Создаем скрытое поле для данных версий
-            const versionsDataInput = document.createElement('input');
-            versionsDataInput.type = 'hidden';
-            versionsDataInput.name = 'versions_info';
-            versionsDataInput.value = JSON.stringify(versionsData);
-            form.appendChild(versionsDataInput);
-            
+            console.log('Collected versions data:', versionsData);
+
+            // Создаем FormData
+            const formData = new FormData(form);
+            formData.append('versions_info', JSON.stringify(versionsData));
+
             // Отключаем кнопку отправки
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
@@ -682,13 +683,17 @@ window.CONFIG = {
             // Отправляем форму через fetch
             fetch(form.action, {
                 method: 'POST',
-                body: new FormData(form),
+                body: formData,
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response received:', response);
+                return response.json();
+            })
             .then(data => {
+                console.log('Data received:', data);
                 if (data.success) {
                     window.location.href = data.redirect_url;
                 } else {

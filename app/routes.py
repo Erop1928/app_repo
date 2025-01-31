@@ -636,19 +636,30 @@ def temp_upload_version(id):
 @login_required
 def batch_upload_versions(id):
     try:
+        print("Batch upload started")
         application = Application.query.get_or_404(id)
         form = BatchUploadForm()
         
+        print(f"Request method: {request.method}")
+        print(f"Form validation: {form.validate_on_submit()}")
+        print(f"Form errors: {form.errors}")
+        print(f"Request form data: {request.form}")
+        print(f"Request files: {request.files}")
+        
         if form.validate_on_submit():
+            print("Form validated successfully")
             uploaded_versions = []
             temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
             
             try:
                 # Получаем информацию о версиях из формы
-                versions_info = json.loads(request.form.get('versions_info', '[]'))
-                print(f"Received versions info: {versions_info}")
+                versions_info = request.form.get('versions_info', '[]')
+                print(f"Raw versions info: {versions_info}")
+                versions_info = json.loads(versions_info)
+                print(f"Parsed versions info: {versions_info}")
                 
                 for info in versions_info:
+                    print(f"Processing version info: {info}")
                     filename = info['filename']
                     version_number = info['version_number']
                     branch = info['branch']
@@ -663,20 +674,21 @@ def batch_upload_versions(id):
                     ).first()
                     
                     if existing_version:
-                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                            return jsonify({
-                                'success': False,
-                                'error': f'Версия {version_number} ({branch}) уже существует'
-                            })
-                        flash(f'Версия {version_number} ({branch}) уже существует')
-                        continue
+                        error_msg = f'Версия {version_number} ({branch}) уже существует'
+                        print(f"Error: {error_msg}")
+                        return jsonify({
+                            'success': False,
+                            'error': error_msg
+                        })
                     
                     # Перемещаем файл из временной директории
                     temp_path = os.path.join(temp_folder, filename)
                     final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+                    print(f"Moving file from {temp_path} to {final_path}")
                     
                     if os.path.exists(temp_path):
                         shutil.move(temp_path, final_path)
+                        print(f"File moved successfully")
                         
                         version = ApkVersion(
                             application_id=application.id,
@@ -690,13 +702,18 @@ def batch_upload_versions(id):
                         )
                         db.session.add(version)
                         uploaded_versions.append(version)
+                        print(f"Version added to session: {version_number}")
+                    else:
+                        print(f"Error: Temp file not found at {temp_path}")
                 
                 if uploaded_versions:
                     try:
+                        print("Committing changes to database")
                         db.session.commit()
                         
                         # Очищаем временную директорию
                         if os.path.exists(temp_folder):
+                            print(f"Cleaning up temp folder: {temp_folder}")
                             shutil.rmtree(temp_folder)
                         
                         # Логируем пакетную загрузку
@@ -718,48 +735,42 @@ def batch_upload_versions(id):
                             f'Загружено {len(uploaded_versions)} версий'
                         )
                         
-                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                            return jsonify({
-                                'success': True,
-                                'redirect_url': url_for('main.application_details', id=application.id)
-                            })
-                            
-                        flash(f'Загружено {len(uploaded_versions)} версий')
-                        return redirect(url_for('main.application_details', id=application.id))
+                        success_msg = f'Загружено {len(uploaded_versions)} версий'
+                        print(f"Success: {success_msg}")
+                        return jsonify({
+                            'success': True,
+                            'message': success_msg,
+                            'redirect_url': url_for('main.application_details', id=application.id)
+                        })
                         
                     except Exception as e:
                         db.session.rollback()
                         error_msg = f'Ошибка при сохранении версий: {str(e)}'
-                        print(f'Error saving versions: {str(e)}')
-                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                            return jsonify({'success': False, 'error': error_msg})
-                        flash(error_msg)
+                        print(f"Error during commit: {error_msg}")
+                        return jsonify({'success': False, 'error': error_msg})
                 else:
                     error_msg = 'Ни один файл не был загружен'
-                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                        return jsonify({'success': False, 'error': error_msg})
-                    flash(error_msg)
+                    print(f"Error: {error_msg}")
+                    return jsonify({'success': False, 'error': error_msg})
                     
             except json.JSONDecodeError as e:
                 error_msg = f'Ошибка при разборе данных версий: {str(e)}'
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return jsonify({'success': False, 'error': error_msg})
-                flash(error_msg)
+                print(f"JSON decode error: {error_msg}")
+                return jsonify({'success': False, 'error': error_msg})
                 
             except Exception as e:
                 error_msg = f'Ошибка при обработке загрузки: {str(e)}'
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return jsonify({'success': False, 'error': error_msg})
-                flash(error_msg)
+                print(f"General error: {error_msg}")
+                return jsonify({'success': False, 'error': error_msg})
+        else:
+            print(f"Form validation failed: {form.errors}")
         
         return render_template('batch_upload.html', form=form, application=application)
         
     except Exception as e:
         error_msg = f'Ошибка: {str(e)}'
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'success': False, 'error': error_msg})
-        flash(error_msg)
-        return redirect(url_for('main.application_details', id=id))
+        print(f"Unexpected error: {error_msg}")
+        return jsonify({'success': False, 'error': error_msg})
 
 @main.route('/application/<int:id>/batch_edit', methods=['GET', 'POST'])
 @login_required

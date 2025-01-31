@@ -232,5 +232,4 @@ class OneTimeDownloadLink(db.Model):
         )
         db.session.add(link)
         db.session.commit()
-        return link
-  
+        return link 
