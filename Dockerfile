@@ -19,14 +19,15 @@ WORKDIR /app
 COPY --chown=app:app requirements.txt .
 
 # Установка зависимостей Python
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir flask-migrate
 
 # Копирование исходного кода приложения
 COPY --chown=app:app . .
 
 # Создание директорий для данных
-RUN mkdir -p uploads && \
-    chown -R app:app uploads
+RUN mkdir -p uploads migrations && \
+    chown -R app:app uploads migrations
 
 # Установка переменных окружения
 ENV FLASK_APP=main.py

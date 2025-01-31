@@ -130,22 +130,46 @@ restore_backup() {
 init_flask_migrate() {
     log "Initializing Flask-Migrate..."
     
-    # Устанавливаем переменные окружения
-    docker-compose exec -T web bash -c "export FLASK_APP=main.py && \
-        pip install flask-migrate && \
-        flask db init && \
-        flask db migrate -m 'Initial migration' && \
-        flask db upgrade"
+    # Проверяем наличие директории migrations
+    if [ ! -d "migrations" ]; then
+        log "Creating migrations directory..."
+        mkdir -p migrations
+        chown -R 1000:1000 migrations  # 1000 это UID пользователя app в контейнере
+    fi
     
-    return $?
+    # Инициализируем миграции
+    if ! docker-compose exec -T web flask db init; then
+        warning "Flask db init failed, migrations may already exist"
+    fi
+    
+    # Создаем и применяем первую миграцию
+    if ! docker-compose exec -T web flask db migrate -m "Initial migration"; then
+        warning "Flask db migrate failed, schema may already exist"
+    fi
+    
+    if ! docker-compose exec -T web flask db upgrade; then
+        error "Flask db upgrade failed"
+        return 1
+    fi
+    
+    return 0
 }
 
 # Функция для применения миграций
 apply_migrations() {
     log "Applying database migrations..."
     
-    # Устанавливаем переменные окружения и применяем миграции
-    if ! docker-compose exec -T web bash -c "export FLASK_APP=main.py && flask db upgrade"; then
+    # Проверяем существование директории migrations
+    if [ ! -d "migrations" ]; then
+        log "Migrations directory not found, initializing Flask-Migrate..."
+        if ! init_flask_migrate; then
+            return 1
+        fi
+        return 0
+    fi
+    
+    # Применяем существующие миграции
+    if ! docker-compose exec -T web flask db upgrade; then
         error "Failed to apply migrations"
         return 1
     fi
@@ -211,22 +235,12 @@ main() {
         exit 1
     fi
     
-    # Инициализируем Flask-Migrate если это первый запуск
-    if [ "$CREATE_DB" = true ]; then
-        if ! init_flask_migrate; then
-            error "Failed to initialize Flask-Migrate"
-            warning "Attempting to restore from backup..."
-            restore_backup "$BACKUP_DB" "$BACKUP_FILES"
-            exit 1
-        fi
-    else
-        # Применяем миграции если база уже существует
-        if ! apply_migrations; then
-            error "Failed to apply migrations"
-            warning "Attempting to restore from backup..."
-            restore_backup "$BACKUP_DB" "$BACKUP_FILES"
-            exit 1
-        fi
+    # Применяем миграции
+    if ! apply_migrations; then
+        error "Failed to apply migrations"
+        warning "Attempting to restore from backup..."
+        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+        exit 1
     fi
     
     log "Update completed successfully!"
