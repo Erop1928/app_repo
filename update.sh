@@ -134,25 +134,19 @@ init_flask_migrate() {
     if [ ! -d "migrations" ]; then
         log "Creating migrations directory..."
         mkdir -p migrations
-        chown -R 1000:1000 migrations  # 1000 это UID пользователя app в контейнере
     fi
     
-    # Инициализируем миграции
-    if ! docker-compose exec -T web flask db init; then
-        warning "Flask db init failed, migrations may already exist"
-    fi
+    # Инициализируем миграции внутри контейнера
+    docker-compose exec -T web bash -c '
+        export FLASK_APP=migrations.py
+        if [ ! -f "migrations/alembic.ini" ]; then
+            flask db init
+        fi
+        flask db migrate -m "Initial migration"
+        flask db upgrade
+    '
     
-    # Создаем и применяем первую миграцию
-    if ! docker-compose exec -T web flask db migrate -m "Initial migration"; then
-        warning "Flask db migrate failed, schema may already exist"
-    fi
-    
-    if ! docker-compose exec -T web flask db upgrade; then
-        error "Flask db upgrade failed"
-        return 1
-    fi
-    
-    return 0
+    return $?
 }
 
 # Функция для применения миграций
@@ -168,13 +162,13 @@ apply_migrations() {
         return 0
     fi
     
-    # Применяем существующие миграции
-    if ! docker-compose exec -T web flask db upgrade; then
-        error "Failed to apply migrations"
-        return 1
-    fi
+    # Применяем существующие миграции внутри контейнера
+    docker-compose exec -T web bash -c '
+        export FLASK_APP=migrations.py
+        flask db upgrade
+    '
     
-    return 0
+    return $?
 }
 
 # Основной процесс обновления
