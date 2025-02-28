@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, Category, Application, ApkVersion, VersionFlag, Role, UserActionLog, OneTimeDownloadLink
 from app.forms import (LoginForm, CategoryForm, ApplicationForm, UploadApkForm, 
-                      AddFlagForm, BatchUploadForm, UserForm, RoleForm)
+                      AddFlagForm, UserForm, RoleForm)
 from config import Config
 from app import db
 import os
@@ -452,18 +452,40 @@ def delete_version(id):
     version = ApkVersion.query.get_or_404(id)
     application_id = version.application_id
     
-    if version.uploader != current_user:
-        flash('У вас нет прав на удаление этой версии')
-        return redirect(url_for('main.application_details', id=application_id))
+    # Сохраняем информацию о версии для лога
+    version_info = {
+        'version_number': version.version_number,
+        'branch': version.branch,
+        'filename': version.filename,
+        'is_stable': version.is_stable
+    }
     
-    file_path = os.path.join(Config.UPLOAD_FOLDER, version.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    try:
+        # Удаляем файл
+        file_path = os.path.join(Config.UPLOAD_FOLDER, version.filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Удаляем запись из базы
+        db.session.delete(version)
+        db.session.commit()
+        
+        # Логируем удаление
+        UserActionLog.log_action(
+            current_user,
+            'delete_version',
+            'version',
+            version.id,
+            version_info,
+            None,
+            f'Удалена версия {version.version_number} ({version.branch})'
+        )
+        
+        flash('Версия удалена')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при удалении версии: {str(e)}')
     
-    db.session.delete(version)
-    db.session.commit()
-    
-    flash('Версия удалена')
     return redirect(url_for('main.application_details', id=application_id))
 
 @main.route('/categories', methods=['GET', 'POST'])
@@ -626,293 +648,61 @@ def temp_upload_version(id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@main.route('/application/<int:id>/batch_upload', methods=['GET', 'POST'])
-@login_required
-def batch_upload_versions(id):
-    try:
-        print("Batch upload started")
-        application = Application.query.get_or_404(id)
-        form = BatchUploadForm()
-        
-        print(f"Request method: {request.method}")
-        print(f"Form validation: {form.validate_on_submit()}")
-        print(f"Form errors: {form.errors}")
-        print(f"Request form data: {request.form}")
-        print(f"Request files: {request.files}")
-        
-        # Для AJAX-запросов пропускаем валидацию формы
-        if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            print("Processing AJAX request")
-            try:
-                # Получаем информацию о версиях из формы
-                versions_info = request.form.get('versions_info', '[]')
-                print(f"Raw versions info: {versions_info}")
-                versions_info = json.loads(versions_info)
-                print(f"Parsed versions info: {versions_info}")
-                
-                if not versions_info:
-                    error_msg = 'Нет данных для сохранения'
-                    print(f"Error: {error_msg}")
-                    return jsonify({'success': False, 'error': error_msg})
-                
-                uploaded_versions = []
-                temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
-                
-                for info in versions_info:
-                    print(f"Processing version info: {info}")
-                    filename = info['filename']
-                    version_number = info['version_number']
-                    branch = info['branch']
-                    changelog = info.get('changelog', '')
-                    is_stable = info.get('is_stable', False)
-                    
-                    # Проверяем существование версии
-                    existing_version = ApkVersion.query.filter_by(
-                        application_id=application.id,
-                        version_number=version_number,
-                        branch=branch
-                    ).first()
-                    
-                    if existing_version:
-                        error_msg = f'Версия {version_number} ({branch}) уже существует'
-                        print(f"Error: {error_msg}")
-                        return jsonify({
-                            'success': False,
-                            'error': error_msg
-                        })
-                    
-                    # Перемещаем файл из временной директории
-                    temp_path = os.path.join(temp_folder, filename)
-                    final_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-                    print(f"Moving file from {temp_path} to {final_path}")
-                    
-                    if os.path.exists(temp_path):
-                        shutil.move(temp_path, final_path)
-                        print(f"File moved successfully")
-                        
-                        version = ApkVersion(
-                            application_id=application.id,
-                            version_number=version_number,
-                            branch=branch,
-                            changelog=changelog,
-                            is_stable=is_stable,
-                            filename=filename,
-                            file_size=os.path.getsize(final_path),
-                            uploader=current_user
-                        )
-                        db.session.add(version)
-                        uploaded_versions.append(version)
-                        print(f"Version added to session: {version_number}")
-                    else:
-                        error_msg = f'Файл не найден: {filename}'
-                        print(f"Error: {error_msg}")
-                        return jsonify({
-                            'success': False,
-                            'error': error_msg
-                        })
-                
-                if uploaded_versions:
-                    try:
-                        print("Committing changes to database")
-                        db.session.commit()
-                        
-                        # Очищаем временную директорию
-                        if os.path.exists(temp_folder):
-                            print(f"Cleaning up temp folder: {temp_folder}")
-                            shutil.rmtree(temp_folder)
-                        
-                        # Логируем пакетную загрузку
-                        UserActionLog.log_action(
-                            current_user,
-                            'batch_upload_versions',
-                            'application',
-                            application.id,
-                            None,
-                            {
-                                'uploaded_versions': [
-                                    {
-                                        'version': v.version_number,
-                                        'branch': v.branch,
-                                        'filename': v.filename
-                                    } for v in uploaded_versions
-                                ]
-                            },
-                            f'Загружено {len(uploaded_versions)} версий'
-                        )
-                        
-                        success_msg = f'Загружено {len(uploaded_versions)} версий'
-                        print(f"Success: {success_msg}")
-                        return jsonify({
-                            'success': True,
-                            'message': success_msg,
-                            'redirect_url': url_for('main.application_details', id=application.id)
-                        })
-                        
-                    except Exception as e:
-                        db.session.rollback()
-                        error_msg = f'Ошибка при сохранении версий: {str(e)}'
-                        print(f"Error during commit: {error_msg}")
-                        return jsonify({'success': False, 'error': error_msg})
-                
-            except json.JSONDecodeError as e:
-                error_msg = f'Ошибка при разборе данных версий: {str(e)}'
-                print(f"JSON decode error: {error_msg}")
-                return jsonify({'success': False, 'error': error_msg})
-                
-            except Exception as e:
-                error_msg = f'Ошибка при обработке загрузки: {str(e)}'
-                print(f"General error: {error_msg}")
-                return jsonify({'success': False, 'error': error_msg})
-        
-        # Для обычных GET-запросов возвращаем шаблон
-        return render_template('batch_upload.html', form=form, application=application)
-        
-    except Exception as e:
-        error_msg = f'Ошибка: {str(e)}'
-        print(f"Unexpected error: {error_msg}")
-        return jsonify({'success': False, 'error': error_msg})
-
-@main.route('/application/<int:id>/batch_edit', methods=['GET', 'POST'])
-@login_required
-def batch_edit_versions(id):
-    application = Application.query.get_or_404(id)
-    
-    if request.method == 'POST':
-        try:
-            for version in application.versions:
-                changelog = request.form.get(f'changelog_{version.id}', '')
-                is_stable = request.form.get(f'is_stable_{version.id}', False) == 'on'
-                
-                version.changelog = changelog
-                version.is_stable = is_stable
-            
-            db.session.commit()
-            flash('Изменения сохранены')
-            return redirect(url_for('main.application_details', id=application.id))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка при сохранении изменений: {str(e)}')
-    
-    # Получаем только последние загруженные версии (например, за последние 24 часа)
-    recent_versions = ApkVersion.query.filter_by(application_id=application.id)\
-        .order_by(ApkVersion.upload_date.desc())\
-        .limit(10)\
-        .all()
-    
-    return render_template('batch_edit.html', 
-                         application=application,
-                         versions=recent_versions)
-
-@admin.route('/logs')
-@login_required
-@admin_required
-def logs_list():
-    page = request.args.get('page', 1, type=int)
-    per_page = 50
-    
-    # Фильтры
-    username = request.args.get('username', '')
-    action = request.args.get('action', '')
-    
-    # Базовый запрос
-    query = UserActionLog.query.order_by(UserActionLog.timestamp.desc())
-    
-    # Применяем фильтры
-    if username:
-        query = query.filter(UserActionLog.username.ilike(f'%{username}%'))
-    if action:
-        query = query.filter(UserActionLog.action.ilike(f'%{action}%'))
-    
-    # Пагинация
-    logs = query.paginate(page=page, per_page=per_page, error_out=False)
-    
-    return render_template('admin/logs.html', logs=logs)
-
 @main.route('/version/<int:id>/generate_link', methods=['POST'])
 @login_required
 def generate_download_link(id):
-    try:
-        version = ApkVersion.query.get_or_404(id)
-        
-        # Создаем одноразовую ссылку
-        link = OneTimeDownloadLink.create_for_version(version, current_user)
-        
-        # Логируем создание ссылки
-        UserActionLog.log_action(
-            current_user,
-            'generate_download_link',
-            'version',
-            version.id,
-            None,
-            {
-                'link_token': link.token,
-                'expires_at': link.expires_at.isoformat()
-            },
-            f'Создана одноразовая ссылка для версии {version.version_number}'
-        )
-        
-        # Формируем полный URL для скачивания
-        download_url = f"{Config.HOST_URL}/download/{link.token}"
-        
-        return jsonify({
-            'success': True,
-            'download_url': download_url,
-            'expires_at': link.expires_at.strftime('%d.%m.%Y %H:%M:%S')
-        })
-        
-    except Exception as e:
-        print(f'Error generating download link: {str(e)}')
-        return jsonify({
-            'success': False,
-            'error': 'Ошибка при создании ссылки'
-        }), 500
+    version = ApkVersion.query.get_or_404(id)
+    
+    # Создаем одноразовую ссылку
+    link = OneTimeDownloadLink(
+        version_id=version.id,
+        created_by=current_user
+    )
+    db.session.add(link)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'token': link.token,
+        'expires_at': link.expires_at.strftime('%d.%m.%Y %H:%M')
+    })
 
 @main.route('/download/<token>')
 def download_by_link(token):
+    link = OneTimeDownloadLink.query.filter_by(token=token).first_or_404()
+    
+    # Проверяем, не истек ли срок действия ссылки
+    if link.is_expired:
+        flash('Срок действия ссылки истек')
+        return redirect(url_for('main.index'))
+    
+    # Проверяем, не была ли ссылка уже использована
+    if link.is_used:
+        flash('Ссылка уже была использована')
+        return redirect(url_for('main.index'))
+    
+    version = link.version
+    file_path = os.path.join(Config.UPLOAD_FOLDER, version.filename)
+    
+    if not os.path.exists(file_path):
+        flash('Файл не найден')
+        return redirect(url_for('main.index'))
+    
+    # Отмечаем ссылку как использованную
+    link.is_used = True
+    link.used_at = datetime.utcnow()
+    
+    # Увеличиваем счетчик загрузок
+    version.downloads += 1
+    
+    db.session.commit()
+    
     try:
-        # Находим ссылку
-        link = OneTimeDownloadLink.query.filter_by(token=token).first_or_404()
-        
-        # Проверяем валидность ссылки
-        if not link.is_valid():
-            if link.is_used:
-                flash('Эта ссылка уже была использована')
-            else:
-                flash('Срок действия ссылки истек')
-            return redirect(url_for('main.index'))
-        
-        # Получаем IP-адрес ользователя
-        ip_address = request.remote_addr
-        
-        # Отмечаем ссылку как использованную
-        link.mark_as_used(ip_address)
-        
-        # Логируем скачивание
-        UserActionLog.log_action(
-            link.created_by,  # используем создателя ссылки как пользователя
-            'download_by_link',
-            'version',
-            link.version_id,
-            None,
-            {
-                'link_token': token,
-                'ip_address': ip_address
-            },
-            f'Скачивание по одноразовой ссылке версии {link.version.version_number}'
-        )
-        
-        # Увеличиваем счетчик загрузок
-        link.version.downloads += 1
-        db.session.commit()
-        
         return send_from_directory(
             Config.UPLOAD_FOLDER,
-            link.version.filename,
+            version.filename,
             as_attachment=True
         )
-        
     except Exception as e:
-        flash('Ошибка при скачивании файла')
-        print(f'Error downloading by link: {str(e)}')
+        flash(f'Ошибка при скачивании файла: {str(e)}')
         return redirect(url_for('main.index')) 
