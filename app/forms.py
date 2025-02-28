@@ -39,6 +39,13 @@ class UploadApkForm(FlaskForm):
     is_stable = BooleanField('Стабильная версия')
     submit = SubmitField('Загрузить')
 
+class MultiUploadApkForm(FlaskForm):
+    apk_files = MultipleFileField('APK файлы', validators=[
+        FileRequired(),
+        FileAllowed(['apk'], 'Разрешены только APK файлы')
+    ])
+    submit = SubmitField('Загрузить выбранные файлы')
+
 class AddFlagForm(FlaskForm):
     flag_type = SelectField('Тип', choices=[
         ('bug', 'Ошибка'),
