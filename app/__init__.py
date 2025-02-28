@@ -23,12 +23,12 @@ def create_app():
         response.headers.set('X-CSRFToken', csrf.generate_csrf())
         return response
     
-    # Обработка ошибок CSRF
-    @csrf.error_handler
-    def csrf_error(reason):
+    # Обработка ошибок CSRF через обработчик ошибок Flask
+    @app.errorhandler(400)
+    def handle_csrf_error(e):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify(success=False, error=f'CSRF ошибка: {reason}'), 400
-        return app.errorhandler(400)(reason)
+            return jsonify(success=False, error='CSRF ошибка: неверный или отсутствующий токен'), 400
+        return e
 
     from app.routes import main, auth, admin
     from app.api import api
