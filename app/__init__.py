@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from config import Config
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -20,7 +20,7 @@ def create_app():
     # Настраиваем обработку CSRF для AJAX-запросов
     @app.after_request
     def add_csrf_header(response):
-        response.headers.set('X-CSRFToken', csrf.generate_csrf())
+        response.headers.set('X-CSRFToken', generate_csrf())
         return response
     
     # Обработка ошибок CSRF через обработчик ошибок Flask
