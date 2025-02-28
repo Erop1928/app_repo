@@ -646,17 +646,23 @@ def batch_upload_versions(id):
         print(f"Request form data: {request.form}")
         print(f"Request files: {request.files}")
         
-        if form.validate_on_submit():
-            print("Form validated successfully")
-            uploaded_versions = []
-            temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
-            
+        # Для AJAX-запросов пропускаем валидацию формы
+        if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            print("Processing AJAX request")
             try:
                 # Получаем информацию о версиях из формы
                 versions_info = request.form.get('versions_info', '[]')
                 print(f"Raw versions info: {versions_info}")
                 versions_info = json.loads(versions_info)
                 print(f"Parsed versions info: {versions_info}")
+                
+                if not versions_info:
+                    error_msg = 'Нет данных для сохранения'
+                    print(f"Error: {error_msg}")
+                    return jsonify({'success': False, 'error': error_msg})
+                
+                uploaded_versions = []
+                temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
                 
                 for info in versions_info:
                     print(f"Processing version info: {info}")
@@ -704,7 +710,12 @@ def batch_upload_versions(id):
                         uploaded_versions.append(version)
                         print(f"Version added to session: {version_number}")
                     else:
-                        print(f"Error: Temp file not found at {temp_path}")
+                        error_msg = f'Файл не найден: {filename}'
+                        print(f"Error: {error_msg}")
+                        return jsonify({
+                            'success': False,
+                            'error': error_msg
+                        })
                 
                 if uploaded_versions:
                     try:
@@ -748,11 +759,7 @@ def batch_upload_versions(id):
                         error_msg = f'Ошибка при сохранении версий: {str(e)}'
                         print(f"Error during commit: {error_msg}")
                         return jsonify({'success': False, 'error': error_msg})
-                else:
-                    error_msg = 'Ни один файл не был загружен'
-                    print(f"Error: {error_msg}")
-                    return jsonify({'success': False, 'error': error_msg})
-                    
+                
             except json.JSONDecodeError as e:
                 error_msg = f'Ошибка при разборе данных версий: {str(e)}'
                 print(f"JSON decode error: {error_msg}")
@@ -762,9 +769,8 @@ def batch_upload_versions(id):
                 error_msg = f'Ошибка при обработке загрузки: {str(e)}'
                 print(f"General error: {error_msg}")
                 return jsonify({'success': False, 'error': error_msg})
-        else:
-            print(f"Form validation failed: {form.errors}")
         
+        # Для обычных GET-запросов возвращаем шаблон
         return render_template('batch_upload.html', form=form, application=application)
         
     except Exception as e:

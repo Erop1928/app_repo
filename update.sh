@@ -6,26 +6,73 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Функция для вывода сообщений
+# Определяем пути к директориям
+DATA_DIR="./pgdata"
+UPLOADS_DIR="./uploads"
+BACKUPS_DIR="./backups"
+LOGS_DIR="./logs"
+
+# Создаем необходимые директории
+mkdir -p "$DATA_DIR" "$UPLOADS_DIR" "$BACKUPS_DIR" "$LOGS_DIR"
+
+# Определяем текущий лог файл
+CURRENT_LOG="$LOGS_DIR/$(date +%Y%m%d_%H).log"
+
+# Функция для логирования
+write_log() {
+    local level=$1
+    local message=$2
+    local timestamp=$(date +'%Y-%m-%d %H:%M:%S')
+    local log_message="[$timestamp] $level: $message"
+    
+    # Проверяем, нужно ли создать новый лог файл
+    local new_log="$LOGS_DIR/$(date +%Y%m%d_%H).log"
+    if [ "$new_log" != "$CURRENT_LOG" ]; then
+        CURRENT_LOG="$new_log"
+    fi
+    
+    # Записываем в лог файл
+    echo "$log_message" >> "$CURRENT_LOG"
+    
+    # Выводим в консоль с цветом
+    case $level in
+        "INFO")
+            echo -e "${GREEN}$log_message${NC}"
+            ;;
+        "ERROR")
+            echo -e "${RED}$log_message${NC}"
+            ;;
+        "WARNING")
+            echo -e "${YELLOW}$log_message${NC}"
+            ;;
+        *)
+            echo "$log_message"
+            ;;
+    esac
+}
+
+# Функции для разных уровней логирования
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+    write_log "INFO" "$1"
 }
 
 error() {
-    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+    write_log "ERROR" "$1"
 }
 
 warning() {
-    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+    write_log "WARNING" "$1"
 }
 
-# Создаем директорию для бэкапов если её нет
-mkdir -v backups
+# Очистка старых логов (оставляем последние 24 часа)
+cleanup_logs() {
+    find "$LOGS_DIR" -name "*.log" -type f -mtime +1 -delete
+}
 
 # Текущая дата для имени файла
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DB="backups/db_backup_$DATE.sql"
-BACKUP_FILES="backups/uploads_backup_$DATE.tar.gz"
+BACKUP_DB="$BACKUPS_DIR/db_backup_$DATE.sql"
+BACKUP_FILES="$BACKUPS_DIR/uploads_backup_$DATE.tar.gz"
 
 # Функция для создания бэкапа
 create_backup() {
@@ -33,13 +80,13 @@ create_backup() {
     
     # Проверяем существование базы данных
     log "Checking database existence..."
-    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw apk_store; then
-        warning "Database 'apk_store' does not exist, skipping database backup"
+    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw app_db; then
+        warning "Database 'app_db' does not exist, skipping database backup"
         CREATE_DB=true
     else
         # Бэкап базы данных
         log "Creating database backup..."
-        if docker-compose exec -T db pg_dump -U postgres apk_store > "$BACKUP_DB"; then
+        if docker-compose exec -T db pg_dump -U postgres app_db > "$BACKUP_DB"; then
             log "Database backup created: $BACKUP_DB"
         else
             error "Failed to create database backup"
@@ -48,10 +95,10 @@ create_backup() {
     fi
     
     # Проверяем существование директории uploads
-    if [ -d "uploads" ] && [ "$(ls -A uploads 2>/dev/null)" ]; then
+    if [ -d "$UPLOADS_DIR" ] && [ "$(ls -A $UPLOADS_DIR 2>/dev/null)" ]; then
         # Бэкап загруженных файлов
         log "Creating uploads backup..."
-        if tar -czf "$BACKUP_FILES" uploads/; then
+        if tar -czf "$BACKUP_FILES" -C "$UPLOADS_DIR" .; then
             log "Uploads backup created: $BACKUP_FILES"
         else
             error "Failed to create uploads backup"
@@ -59,7 +106,7 @@ create_backup() {
         fi
     else
         warning "Uploads directory is empty or does not exist, skipping files backup"
-        mkdir -p uploads
+        mkdir -p "$UPLOADS_DIR"
     fi
     
     log "Backup completed successfully"
@@ -71,9 +118,9 @@ init_database() {
     log "Initializing database..."
     
     # Создаем базу данных если она не существует
-    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw apk_store; then
-        log "Creating database 'apk_store'..."
-        if ! docker-compose exec -T db psql -U postgres -c "CREATE DATABASE apk_store;"; then
+    if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw app_db; then
+        log "Creating database 'app_db'..."
+        if ! docker-compose exec -T db psql -U postgres -c "CREATE DATABASE app_db;"; then
             error "Failed to create database"
             return 1
         fi
@@ -98,8 +145,8 @@ restore_backup() {
     # Восстановление базы данных
     if [ -f "$db_backup" ]; then
         log "Restoring database..."
-        if docker-compose exec -T db psql -U postgres -d apk_store -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
-           docker-compose exec -T db psql -U postgres apk_store < "$db_backup"; then
+        if docker-compose exec -T db psql -U postgres -d app_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
+           docker-compose exec -T db psql -U postgres app_db < "$db_backup"; then
             log "Database restored successfully"
         else
             error "Failed to restore database"
@@ -112,7 +159,7 @@ restore_backup() {
     # Восстановление файлов
     if [ -f "$files_backup" ]; then
         log "Restoring uploads..."
-        if rm -rf uploads/* && tar -xzf "$files_backup" -C .; then
+        if rm -rf "$UPLOADS_DIR"/* && tar -xzf "$files_backup" -C "$UPLOADS_DIR"; then
             log "Files restored successfully"
         else
             error "Failed to restore files"
@@ -174,6 +221,9 @@ apply_migrations() {
 # Основной процесс обновления
 main() {
     log "Starting update process..."
+    
+    # Очистка старых логов
+    cleanup_logs
     
     # Создаем бэкап перед обновлением
     if ! create_backup; then
@@ -241,8 +291,8 @@ main() {
     
     # Очистка старых бэкапов (оставляем последние 5)
     log "Cleaning up old backups..."
-    ls -t backups/db_backup_* 2>/dev/null | tail -n +6 | xargs -r rm
-    ls -t backups/uploads_backup_* 2>/dev/null | tail -n +6 | xargs -r rm
+    ls -t "$BACKUPS_DIR/db_backup_*" 2>/dev/null | tail -n +6 | xargs -r rm
+    ls -t "$BACKUPS_DIR/uploads_backup_*" 2>/dev/null | tail -n +6 | xargs -r rm
 }
 
 # Запускаем основной процесс
