@@ -145,6 +145,15 @@ restore_backup() {
     # Восстановление базы данных
     if [ -f "$db_backup" ]; then
         log "Restoring database..."
+        # Проверяем существование базы данных
+        if ! docker-compose exec -T db psql -U postgres -lqt | cut -d \| -f 1 | grep -qw app_db; then
+            log "Creating database 'app_db'..."
+            if ! docker-compose exec -T db psql -U postgres -c "CREATE DATABASE app_db;"; then
+                error "Failed to create database"
+                return 1
+            fi
+        fi
+        
         if docker-compose exec -T db psql -U postgres -d app_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && \
            docker-compose exec -T db psql -U postgres app_db < "$db_backup"; then
             log "Database restored successfully"
@@ -271,19 +280,16 @@ main() {
     log "Waiting for database to start..."
     sleep 10
     
-    # Инициализируем базу данных если нужно
-    if ! init_database; then
-        error "Failed to initialize database"
-        warning "Attempting to restore from backup..."
-        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
+    # Всегда восстанавливаем данные из резервной копии
+    log "Restoring data from backup..."
+    if ! restore_backup "$BACKUP_DB" "$BACKUP_FILES"; then
+        error "Failed to restore data from backup"
         exit 1
     fi
     
     # Применяем миграции
     if ! apply_migrations; then
         error "Failed to apply migrations"
-        warning "Attempting to restore from backup..."
-        restore_backup "$BACKUP_DB" "$BACKUP_FILES"
         exit 1
     fi
     
