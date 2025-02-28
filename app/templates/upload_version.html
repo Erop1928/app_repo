@@ -115,8 +115,16 @@
                 <div class="files-list" id="filesList"></div>
             </div>
             
+            <div class="form-group mt-4">
+                <button id="save-all-btn" class="btn btn-primary">
+                    Сохранить все файлы
+                    <span id="save-spinner" class="spinner-border spinner-border-sm ml-1" role="status" style="display: none;">
+                        <span class="sr-only">Загрузка...</span>
+                    </span>
+                </button>
+            </div>
+            
             <div class="form-actions multi-actions">
-                <button type="button" class="btn btn-primary" id="saveAllBtn" style="display: none;">Сохранить все файлы</button>
                 <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
             </div>
         </form>
@@ -228,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const multiFileInput = document.getElementById('multiFileInput');
     const multiDropZone = document.getElementById('multiDropZone');
     const filesList = document.getElementById('filesList');
-    const saveAllBtn = document.getElementById('saveAllBtn');
+    const saveAllBtn = document.getElementById('save-all-btn');
     
     // Вкладки
     const singleUploadTab = document.getElementById('singleUploadTab');
@@ -427,27 +435,40 @@ document.addEventListener('DOMContentLoaded', function() {
             if (xhr.status === 200) {
                 try {
                     const response = JSON.parse(xhr.responseText);
+                    console.log('Ответ сервера:', response);
                     if (response.success) {
                         progressText.textContent = 'Загружено';
                         fileCard.classList.add('uploaded');
                         
                         // Показываем метаданные
                         fileCard.querySelector('.file-metadata').style.display = 'block';
+                        
+                        // Если в ответе есть данные о версии, заполняем их
+                        if (response.results && response.results.length > 0) {
+                            const fileResult = response.results.find(r => r.filename === file.name);
+                            if (fileResult && fileResult.success) {
+                                fileCard.querySelector('.version-input').value = fileResult.version_number || '';
+                                fileCard.querySelector('.branch-select').value = fileResult.branch || 'release';
+                            }
+                        }
                     } else {
                         progressText.textContent = 'Ошибка: ' + (response.error || 'Неизвестная ошибка');
                         fileCard.classList.add('error');
                     }
                 } catch (e) {
+                    console.error('Ошибка при обработке ответа:', e, xhr.responseText);
                     progressText.textContent = 'Ошибка при обработке ответа';
                     fileCard.classList.add('error');
                 }
             } else {
+                console.error('Ошибка HTTP:', xhr.status, xhr.statusText);
                 progressText.textContent = 'Ошибка: ' + xhr.status;
                 fileCard.classList.add('error');
             }
         });
         
-        xhr.addEventListener('error', function() {
+        xhr.addEventListener('error', function(e) {
+            console.error('Ошибка сети:', e);
             progressText.textContent = 'Ошибка сети';
             fileCard.classList.add('error');
         });
@@ -516,6 +537,24 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Проверяем, что все обязательные поля заполнены
+        let hasErrors = false;
+        fileCards.forEach(card => {
+            const versionInput = card.querySelector('.version-input');
+            if (!versionInput.value.trim()) {
+                versionInput.classList.add('is-invalid');
+                hasErrors = true;
+            } else {
+                versionInput.classList.remove('is-invalid');
+            }
+        });
+        
+        if (hasErrors) {
+            alert('Пожалуйста, заполните все обязательные поля (номер версии)');
+            return;
+        }
+        
+        // Собираем данные для отправки
         const versions = [];
         
         fileCards.forEach(card => {
@@ -523,29 +562,48 @@ document.addEventListener('DOMContentLoaded', function() {
             const flagItems = card.querySelectorAll('.flag-item');
             
             flagItems.forEach(item => {
-                flags.push({
-                    type: item.querySelector('.flag-type').value,
-                    description: item.querySelector('.flag-description').value
-                });
+                const flagType = item.querySelector('.flag-type').value;
+                const flagDescription = item.querySelector('.flag-description').value;
+                
+                if (flagType && flagDescription.trim()) {
+                    flags.push({
+                        type: flagType,
+                        description: flagDescription.trim()
+                    });
+                }
             });
             
             versions.push({
                 filename: card.dataset.filename,
-                version_number: card.querySelector('.version-input').value,
+                version_number: card.querySelector('.version-input').value.trim(),
                 branch: card.querySelector('.branch-select').value,
-                changelog: card.querySelector('.changelog-input').value,
+                changelog: card.querySelector('.changelog-input').value.trim(),
                 is_stable: card.querySelector('.stable-checkbox').checked,
                 flags: flags
             });
         });
+        
+        console.log('Отправляемые данные:', { versions: versions });
+        
+        // Показываем индикатор загрузки
+        const saveSpinner = document.getElementById('save-spinner');
+        if (saveSpinner) saveSpinner.style.display = 'inline-block';
+        saveAllBtn.disabled = true;
         
         // Отправляем данные на сервер
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `/application/{{ application.id }}/save_multi_upload`);
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.setRequestHeader('X-CSRFToken', document.querySelector('input[name="csrf_token"]').value);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         
         xhr.addEventListener('load', function() {
+            console.log('Ответ сервера:', xhr.status, xhr.responseText);
+            
+            // Скрываем индикатор загрузки
+            if (saveSpinner) saveSpinner.style.display = 'none';
+            saveAllBtn.disabled = false;
+            
             if (xhr.status === 200) {
                 try {
                     const response = JSON.parse(xhr.responseText);
@@ -553,18 +611,37 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert('Файлы успешно сохранены');
                         window.location.href = `/application/{{ application.id }}`;
                     } else {
-                        alert('Ошибка: ' + (response.error || 'Неизвестная ошибка'));
+                        let errorMessage = response.error || 'Неизвестная ошибка';
+                        
+                        // Если есть результаты с ошибками, показываем их
+                        if (response.results && response.results.length > 0) {
+                            const errors = response.results
+                                .filter(r => !r.success)
+                                .map(r => `${r.filename || 'Неизвестный файл'}: ${r.error}`)
+                                .join('\n');
+                            
+                            if (errors) {
+                                errorMessage += '\n\nДетали ошибок:\n' + errors;
+                            }
+                        }
+                        
+                        alert('Ошибка: ' + errorMessage);
                     }
                 } catch (e) {
-                    alert('Ошибка при обработке ответа');
+                    console.error('Ошибка при обработке ответа:', e, xhr.responseText);
+                    alert('Ошибка при обработке ответа сервера');
                 }
             } else {
-                alert('Ошибка: ' + xhr.status);
+                console.error('Ошибка HTTP:', xhr.status, xhr.statusText);
+                alert('Ошибка сервера: ' + xhr.status + ' ' + xhr.statusText);
             }
         });
         
-        xhr.addEventListener('error', function() {
-            alert('Ошибка сети');
+        xhr.addEventListener('error', function(e) {
+            console.error('Ошибка сети:', e);
+            if (saveSpinner) saveSpinner.style.display = 'none';
+            saveAllBtn.disabled = false;
+            alert('Ошибка сети при отправке данных');
         });
         
         xhr.send(JSON.stringify({ versions: versions }));

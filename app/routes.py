@@ -427,7 +427,7 @@ def add_flag(id):
                 version_id=version.id,
                 flag_type=flag_type,
                 description=description,
-                created_by=current_user
+                created_by_id=current_user.id
             )
             
             try:
@@ -462,7 +462,7 @@ def add_flag(id):
                     version_id=version.id,
                     flag_type=form.flag_type.data,
                     description=form.description.data,
-                    created_by=current_user
+                    created_by_id=current_user.id
                 )
                 db.session.add(flag)
                 db.session.commit()
@@ -810,174 +810,224 @@ def download_by_link(token):
 @login_required
 def multi_temp_upload(id):
     try:
+        current_app.logger.info(f"Начало временной загрузки нескольких файлов для приложения {id}")
         application = Application.query.get_or_404(id)
         
+        # Проверяем права доступа
+        if not current_user.is_admin() and application.uploader_id != current_user.id:
+            current_app.logger.warning(f"Пользователь {current_user.id} пытался загрузить файлы для приложения {id} без прав доступа")
+            return jsonify({'success': False, 'error': 'Недостаточно прав для загрузки файлов для этого приложения'})
+        
+        # Проверяем наличие файлов в запросе
         if 'files[]' not in request.files:
-            return jsonify({'error': 'Файлы не найдены'}), 400
-            
+            current_app.logger.warning("Файлы не найдены в запросе")
+            return jsonify({'success': False, 'error': 'Файлы не найдены в запросе'})
+        
         files = request.files.getlist('files[]')
+        if not files or len(files) == 0:
+            current_app.logger.warning("Список файлов пуст")
+            return jsonify({'success': False, 'error': 'Список файлов пуст'})
+        
+        # Создаем временную директорию, если она не существует
+        temp_dir = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
+        os.makedirs(temp_dir, exist_ok=True)
+        
         results = []
         
-        # Создаем временную директорию, если её нет
-        temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
-        if not os.path.exists(temp_folder):
-            os.makedirs(temp_folder)
-            
         for file in files:
-            if not file:
-                continue
-                
-            # Проверяем размер файла
-            if file.content_length and file.content_length > Config.MAX_FILE_SIZE:
-                results.append({
-                    'filename': file.filename,
-                    'success': False,
-                    'error': f'Файл превышает максимальный размер ({Config.MAX_FILE_SIZE / (1024*1024):.0f} MB)'
-                })
-                continue
-            
-            filename = secure_filename(file.filename)
-            
             try:
-                package_name, version_number, branch = ApkVersion.parse_filename(filename)
+                if file.filename == '':
+                    current_app.logger.warning("Пустое имя файла")
+                    results.append({'success': False, 'error': 'Пустое имя файла', 'filename': None})
+                    continue
                 
-                if not package_name or package_name != application.package_name:
+                current_app.logger.info(f"Обработка файла: {file.filename}")
+                
+                # Проверяем размер файла
+                file.seek(0, os.SEEK_END)
+                file_size = file.tell()
+                file.seek(0)
+                
+                if file_size > Config.MAX_FILE_SIZE:
+                    current_app.logger.warning(f"Файл {file.filename} превышает максимально допустимый размер")
                     results.append({
-                        'filename': filename,
-                        'success': False,
-                        'error': f'Файл не соответствует формату: {application.package_name}-vX.X.X-branch.apk'
+                        'success': False, 
+                        'error': f'Файл превышает максимально допустимый размер {Config.MAX_FILE_SIZE / (1024*1024)} МБ', 
+                        'filename': file.filename
+                    })
+                    continue
+                
+                # Проверяем формат имени файла
+                package_name, version_number, branch = ApkVersion.parse_filename(file.filename)
+                
+                if package_name != application.package_name:
+                    current_app.logger.warning(f"Имя пакета в файле {file.filename} не соответствует имени пакета приложения {application.package_name}")
+                    results.append({
+                        'success': False, 
+                        'error': f'Имя пакета в файле не соответствует имени пакета приложения', 
+                        'filename': file.filename
                     })
                     continue
                 
                 # Сохраняем файл во временную директорию
-                temp_path = os.path.join(temp_folder, filename)
-                file.save(temp_path)
+                file_path = os.path.join(temp_dir, file.filename)
+                file.save(file_path)
+                current_app.logger.info(f"Файл сохранен во временную директорию: {file_path}")
                 
                 results.append({
-                    'success': True,
-                    'filename': filename,
-                    'version_number': version_number,
-                    'branch': branch,
-                    'file_size': os.path.getsize(temp_path),
-                    'temp_path': temp_path
+                    'success': True, 
+                    'filename': file.filename, 
+                    'version_number': version_number, 
+                    'branch': branch
                 })
+                
             except Exception as e:
-                results.append({
-                    'filename': filename,
-                    'success': False,
-                    'error': str(e)
-                })
+                current_app.logger.error(f"Ошибка при обработке файла {file.filename if hasattr(file, 'filename') else 'неизвестно'}: {str(e)}")
+                results.append({'success': False, 'error': str(e), 'filename': file.filename if hasattr(file, 'filename') else None})
         
-        return jsonify({
-            'success': True,
-            'results': results
-        })
+        return jsonify({'success': True, 'results': results})
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Общая ошибка при временной загрузке нескольких файлов: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @main.route('/application/<int:id>/save_multi_upload', methods=['POST'])
 @login_required
 def save_multi_upload(id):
     try:
+        current_app.logger.info(f"Начало сохранения множественной загрузки для приложения {id}")
         application = Application.query.get_or_404(id)
-        data = request.json
         
-        if not data or 'versions' not in data:
-            return jsonify({'error': 'Данные не предоставлены'}), 400
-            
+        # Проверяем права доступа
+        if not current_user.is_admin() and application.uploader_id != current_user.id:
+            current_app.logger.warning(f"Пользователь {current_user.id} пытался сохранить файлы для приложения {id} без прав доступа")
+            return jsonify({'success': False, 'error': 'Недостаточно прав для загрузки файлов для этого приложения'})
+        
+        # Проверяем наличие данных JSON
+        if not request.is_json:
+            current_app.logger.warning(f"Запрос не содержит JSON данных")
+            return jsonify({'success': False, 'error': 'Ожидались данные в формате JSON'})
+        
+        data = request.get_json()
+        current_app.logger.debug(f"Полученные данные: {data}")
+        
+        if 'versions' not in data or not data['versions']:
+            current_app.logger.warning(f"В данных отсутствует ключ 'versions' или он пуст")
+            return jsonify({'success': False, 'error': 'Отсутствуют данные о версиях'})
+        
+        # Создаем директорию для постоянного хранения, если она не существует
+        permanent_dir = os.path.join(Config.UPLOAD_FOLDER, str(id))
+        os.makedirs(permanent_dir, exist_ok=True)
+        current_app.logger.info(f"Директория для постоянного хранения: {permanent_dir}")
+        
         versions_data = data['versions']
-        saved_versions = []
+        results = []
         
         for version_data in versions_data:
             try:
-                # Получаем путь к временному файлу
-                temp_path = os.path.join(
-                    Config.UPLOAD_FOLDER, 
-                    'temp', 
-                    str(id), 
-                    version_data['filename']
-                )
-                
-                if not os.path.exists(temp_path):
+                filename = version_data.get('filename')
+                if not filename:
+                    current_app.logger.warning(f"Отсутствует имя файла в данных версии")
+                    results.append({'success': False, 'error': 'Отсутствует имя файла', 'filename': None})
                     continue
-                    
+                
+                current_app.logger.info(f"Обработка файла: {filename}")
+                
+                # Получаем путь к временному файлу
+                temp_path = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id), filename)
+                current_app.logger.debug(f"Путь к временному файлу: {temp_path}")
+                
+                # Проверяем существование временного файла
+                if not os.path.exists(temp_path):
+                    current_app.logger.warning(f"Временный файл не найден: {temp_path}")
+                    results.append({'success': False, 'error': 'Файл не найден во временной директории', 'filename': filename})
+                    continue
+                
+                # Создаем директорию для постоянного хранения, если она не существует
+                permanent_dir = os.path.join(Config.UPLOAD_FOLDER, str(id))
+                os.makedirs(permanent_dir, exist_ok=True)
+                
+                # Путь для постоянного хранения
+                permanent_path = os.path.join(permanent_dir, filename)
+                current_app.logger.debug(f"Путь для постоянного хранения: {permanent_path}")
+                
+                # Удаляем существующий файл, если он есть
+                if os.path.exists(permanent_path):
+                    current_app.logger.info(f"Удаление существующего файла: {permanent_path}")
+                    os.remove(permanent_path)
+                
                 # Перемещаем файл из временной директории в постоянную
-                target_path = os.path.join(
-                    Config.UPLOAD_FOLDER, 
-                    version_data['filename']
+                shutil.move(temp_path, permanent_path)
+                current_app.logger.info(f"Файл перемещен в постоянную директорию: {permanent_path}")
+                
+                # Создаем новую версию в базе данных
+                version_number = version_data.get('version_number', '')
+                branch = version_data.get('branch', 'release')
+                changelog = version_data.get('changelog', '')
+                is_stable = version_data.get('is_stable', False)
+                
+                # Получаем размер файла
+                file_size = os.path.getsize(permanent_path)
+                
+                new_version = ApkVersion(
+                    application_id=application.id,
+                    version_number=version_number,
+                    branch=branch,
+                    changelog=changelog,
+                    is_stable=is_stable,
+                    filename=filename,
+                    file_size=file_size,
+                    uploader_id=current_user.id
                 )
                 
-                # Если файл уже существует, удаляем его
-                if os.path.exists(target_path):
-                    os.remove(target_path)
-                    
-                # Перемещаем файл
-                shutil.move(temp_path, target_path)
-                
-                # Создаем новую версию
-                version = ApkVersion(
-                    application=application,
-                    version_number=version_data['version_number'],
-                    branch=version_data['branch'],
-                    changelog=version_data.get('changelog', ''),
-                    is_stable=version_data.get('is_stable', False),
-                    filename=version_data['filename'],
-                    file_size=os.path.getsize(target_path),
-                    uploader=current_user
-                )
-                
-                db.session.add(version)
+                db.session.add(new_version)
+                db.session.flush()  # Получаем ID новой версии
                 
                 # Добавляем флаги, если они есть
-                if 'flags' in version_data and version_data['flags']:
-                    for flag_data in version_data['flags']:
-                        flag = VersionFlag(
-                            version=version,
-                            flag_type=flag_data['type'],
-                            description=flag_data['description'],
-                            created_by=current_user
+                flags_data = version_data.get('flags', [])
+                for flag_data in flags_data:
+                    flag_type = flag_data.get('type')
+                    flag_description = flag_data.get('description')
+                    
+                    if flag_type and flag_description:
+                        new_flag = VersionFlag(
+                            version_id=new_version.id,
+                            flag_type=flag_type,
+                            description=flag_description,
+                            created_by_id=current_user.id
                         )
-                        db.session.add(flag)
+                        db.session.add(new_flag)
                 
-                saved_versions.append({
-                    'version_number': version.version_number,
-                    'branch': version.branch,
-                    'filename': version.filename
+                # Логируем действие пользователя
+                log_entry = UserActionLog(
+                    user_id=current_user.id,
+                    action=f"Загрузил новую версию {version_number} ({branch}) для приложения {application.name}",
+                    timestamp=datetime.utcnow()
+                )
+                db.session.add(log_entry)
+                
+                results.append({
+                    'success': True, 
+                    'filename': filename, 
+                    'version_id': new_version.id,
+                    'version_number': version_number
                 })
                 
-                # Логируем действие
-                UserActionLog.log_action(
-                    current_user,
-                    'upload_version',
-                    'apk_version',
-                    version.id,
-                    None,
-                    {
-                        'version': version.version_number,
-                        'branch': version.branch,
-                        'is_stable': version.is_stable,
-                        'filename': version.filename
-                    },
-                    f'Загружена новая версия {version.version_number} для {application.package_name}'
-                )
-                
             except Exception as e:
+                current_app.logger.error(f"Ошибка при обработке файла {filename if 'filename' in locals() else 'неизвестно'}: {str(e)}")
                 db.session.rollback()
-                return jsonify({
-                    'success': False, 
-                    'error': f'Ошибка при сохранении версии {version_data["filename"]}: {str(e)}'
-                }), 500
+                results.append({'success': False, 'error': str(e), 'filename': filename if 'filename' in locals() else None})
         
-        # Сохраняем все изменения в базе данных
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Успешно сохранено {len(saved_versions)} версий',
-            'saved_versions': saved_versions
-        })
-        
+        # Если хотя бы одна версия была успешно сохранена, фиксируем изменения
+        if any(result['success'] for result in results):
+            db.session.commit()
+            current_app.logger.info(f"Успешно сохранены версии для приложения {id}")
+            return jsonify({'success': True, 'results': results})
+        else:
+            current_app.logger.warning(f"Не удалось сохранить ни одной версии для приложения {id}")
+            return jsonify({'success': False, 'error': 'Не удалось сохранить ни одной версии', 'results': results})
+            
     except Exception as e:
+        current_app.logger.error(f"Общая ошибка при сохранении множественной загрузки: {str(e)}")
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500 
+        return jsonify({'success': False, 'error': str(e)}) 
