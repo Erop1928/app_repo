@@ -39,10 +39,6 @@ class UploadApkForm(FlaskForm):
     is_stable = BooleanField('Стабильная версия')
     submit = SubmitField('Загрузить')
 
-class BatchUploadForm(FlaskForm):
-    apk_files = MultipleFileField('APK файлы', validators=[DataRequired()])
-    submit = SubmitField('Загрузить')
-
 class AddFlagForm(FlaskForm):
     flag_type = SelectField('Тип', choices=[
         ('bug', 'Ошибка'),

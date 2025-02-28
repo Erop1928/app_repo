@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, send_from_directory, jsonify, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, send_from_directory, jsonify, current_app, abort
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, Category, Application, ApkVersion, VersionFlag, Role, UserActionLog, OneTimeDownloadLink
 from app.forms import (LoginForm, CategoryForm, ApplicationForm, UploadApkForm, 
@@ -325,70 +325,64 @@ def upload_version(id):
     form = UploadApkForm()
     
     if form.validate_on_submit():
+        file = form.apk_file.data
+        filename = secure_filename(file.filename)
+        
+        # Создаем директорию для загрузок если её нет
+        os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # Полный путь к файлу
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        
+        # Сохраняем файл
+        file.save(filepath)
+        
+        # Получаем размер файла
+        file_size = os.path.getsize(filepath)
+        
+        # Создаем новую версию
+        version = ApkVersion(
+            application=application,
+            version_number=form.version_number.data,
+            branch=form.branch.data,
+            changelog=form.changelog.data,
+            is_stable=form.is_stable.data,
+            filename=filename,
+            file_size=file_size,
+            uploader=current_user
+        )
+        
         try:
-            file = form.apk_file.data
-            if not file:
-                flash('Файл не выбран', 'error')
-                return redirect(url_for('main.upload_version', id=application.id))
-
-            # Создаем директорию для загрузок, если её нет
-            upload_folder = Config.UPLOAD_FOLDER
-            os.makedirs(upload_folder, exist_ok=True)
-            
-            # Генерируем уникальное имя файла
-            original_filename = secure_filename(file.filename)
-            filename = f"{application.package_name}-v{form.version_number.data}-{form.branch.data}.apk"
-            file_path = os.path.join(upload_folder, filename)
-            
-            current_app.logger.info(f'Сохраняем файл: {file_path}')
-            
-            # Сохраняем файл
-            file.save(file_path)
-            file_size = os.path.getsize(file_path)
-            
-            current_app.logger.info(f'Файл сохранен, размер: {file_size}')
-            
-            # Создаем новую версию
-            version = ApkVersion(
-                application_id=application.id,
-                version_number=form.version_number.data,
-                branch=form.branch.data,
-                changelog=form.changelog.data,
-                is_stable=form.is_stable.data,
-                filename=filename,
-                file_size=file_size,
-                uploader=current_user
-            )
-            
-            current_app.logger.info('Создаем запись в базе данных')
-            
-            # Если это стабильная версия, сбрасываем флаг у других версий
-            if version.is_stable:
-                ApkVersion.query.filter_by(
-                    application_id=application.id,
-                    is_stable=True
-                ).update({'is_stable': False})
-            
             db.session.add(version)
             db.session.commit()
             
-            current_app.logger.info('Запись создана успешно')
+            # Логируем действие
+            UserActionLog.log_action(
+                current_user,
+                'upload_version',
+                'apk_version',
+                version.id,
+                None,
+                {
+                    'version': version.version_number,
+                    'branch': version.branch,
+                    'is_stable': version.is_stable,
+                    'filename': version.filename
+                },
+                f'Загружена новая версия {version.version_number} для {application.package_name}'
+            )
             
-            flash('Новая версия успешно загружена', 'success')
+            flash('Версия успешно загружена.', 'success')
             return redirect(url_for('main.application_details', id=application.id))
             
         except Exception as e:
-            current_app.logger.error(f'Ошибка при загрузке: {str(e)}')
-            if 'file_path' in locals() and os.path.exists(file_path):
-                os.remove(file_path)
             db.session.rollback()
-            flash(f'Ошибка при загрузке файла: {str(e)}', 'error')
-            return redirect(url_for('main.upload_version', id=application.id))
+            # Удаляем загруженный файл
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            flash(f'Ошибка при сохранении версии: {str(e)}', 'error')
     
-    return render_template('upload_version.html', 
-                         title='Загрузка версии',
-                         form=form,
-                         application=application)
+    return render_template('upload_version.html', form=form, application=application)
 
 @main.route('/version/<int:id>/flag', methods=['POST'])
 @login_required

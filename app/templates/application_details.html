@@ -3,43 +3,36 @@
 {% block content %}
 <div class="container">
     <div class="app-header">
-        <h1>{{ application.name }}</h1>
-        <div class="app-meta">
+        <div class="app-info">
+            <h1>{{ application.name }}</h1>
             <span class="package-name">{{ application.package_name }}</span>
-            <span class="category">
-                <i class="fas fa-tag"></i> {{ application.category.name }}
-            </span>
         </div>
-        {% if application.description %}
-        <div class="app-description">
-            {{ application.description }}
+        <div class="header-actions">
+            <a href="{{ url_for('main.upload_version', id=application.id) }}" class="btn btn-primary">
+                <i class="fas fa-upload"></i> Загрузить версию
+            </a>
         </div>
-        {% endif %}
     </div>
 
-    <div class="actions">
-        <a href="{{ url_for('main.upload_version', id=application.id) }}" class="btn btn-primary">
-            <i class="fas fa-upload"></i> Загрузить версию
-        </a>
-        <a href="{{ url_for('main.batch_upload_versions', id=application.id) }}" class="btn btn-primary">
-            <i class="fas fa-upload"></i> Пакетная загрузка
-        </a>
-        <a href="{{ url_for('main.index') }}" class="btn">
-            <i class="fas fa-arrow-left"></i> Назад
-        </a>
+    {% if application.description %}
+    <div class="app-description">
+        {{ application.description }}
     </div>
+    {% endif %}
 
-    <div class="versions-container">
-        <h2>Версии</h2>
-        {% for version in application.versions %}
-        <div class="version-card" id="version-{{ version.id }}">
+    <div class="versions-list">
+        {% for version in versions %}
+        <div class="version-card">
             <div class="version-header">
-                <div class="version-title">
-                    <h3>{{ version.version_number }}</h3>
-                    <span class="version-branch" data-version-id="{{ version.id }}">{{ version.branch }}</span>
+                <div class="version-info">
+                    <span class="version-number">
+                        <i class="fas fa-code-branch"></i>
+                        {{ version.version_number }}
+                    </span>
+                    <span class="branch-tag {{ version.branch }}">{{ version.branch }}</span>
                     {% if version.is_stable %}
-                    <span class="stable-badge">
-                        <i class="fas fa-check-circle"></i> Стабильная версия
+                    <span class="stable-tag">
+                        <i class="fas fa-check-circle"></i> Стабильная
                     </span>
                     {% endif %}
                 </div>
@@ -49,60 +42,23 @@
                         {{ version.upload_date.strftime('%d.%m.%Y %H:%M') }}
                     </span>
                     <span class="uploader">
-                        <i class="far fa-user"></i>
+                        <i class="fas fa-user"></i>
                         {{ version.uploader.username }}
                     </span>
-                    <span class="downloads">
-                        <i class="fas fa-download"></i>
-                        {{ version.downloads }}
-                    </span>
-                    <span class="file-size">
-                        <i class="fas fa-file-archive"></i>
-                        {{ (version.file_size / 1024 / 1024) | round(2) }} MB
-                    </span>
                 </div>
             </div>
 
+            {% if version.changelog %}
             <div class="version-changelog">
-                <h4><i class="fas fa-history"></i> Список изменений:</h4>
-                <div class="changelog-content" id="changelog-{{ version.id }}">
-                    <div class="changelog-wrapper" {% if not version.changelog %}style="display: none;"{% endif %}>
-                        <pre class="changelog-text {% if not version.changelog %}changelog-empty{% endif %}">{{ version.changelog or 'Нет описания изменений' }}</pre>
-                        {% if version.changelog and version.changelog.count('\n') > 5 %}
-                        <div class="changelog-fade"></div>
-                        <button class="changelog-expand" onclick="toggleChangelog({{ version.id }})">
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        {% endif %}
-                    </div>
-                    <div class="changelog-edit" style="display: none;">
-                        <textarea class="form-control changelog-textarea">{{ version.changelog or '' }}</textarea>
-                        <div class="changelog-actions">
-                            <button class="btn btn-primary btn-save-changelog" onclick="saveChangelog('{{ version.id }}')">
-                                <i class="fas fa-save"></i> Сохранить
-                            </button>
-                            <button class="btn btn-cancel-changelog" onclick="cancelEditChangelog('{{ version.id }}')">
-                                <i class="fas fa-times"></i> Отмена
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <pre>{{ version.changelog }}</pre>
             </div>
+            {% endif %}
 
-            {% if version.flags %}
             <div class="version-flags">
                 {% for flag in version.flags %}
-                <div class="flag {{ flag.flag_type }}">
-                    <span class="flag-icon">
-                        {% if flag.flag_type == 'bug' %}
-                            <i class="fas fa-bug"></i>
-                        {% elif flag.flag_type == 'feature' %}
-                            <i class="fas fa-star"></i>
-                        {% else %}
-                            <i class="fas fa-exclamation-triangle"></i>
-                        {% endif %}
-                    </span>
-                    <span class="flag-description">{{ flag.description }}</span>
+                <div class="flag-item {{ flag.flag_type }}">
+                    <i class="fas fa-flag"></i>
+                    <span class="flag-text">{{ flag.description }}</span>
                     <span class="flag-meta">
                         {{ flag.created_by.username }},
                         {{ flag.created_date.strftime('%d.%m.%Y') }}
@@ -110,452 +66,477 @@
                 </div>
                 {% endfor %}
             </div>
-            {% endif %}
 
             <div class="version-actions">
-                <a href="{{ url_for('main.download_version', id=version.id) }}" class="btn btn-primary">
-                    <i class="fas fa-download"></i> Скачать
-                </a>
-                <button class="btn btn-secondary" onclick="generateDownloadLink('{{ version.id }}')">
-                    <i class="fas fa-link"></i> Создать ссылку
-                </button>
-                {% if current_user == version.uploader %}
-                <a href="{{ url_for('main.delete_version', id=version.id) }}" 
-                   class="btn btn-danger"
-                   onclick="return confirm('Вы уверены, что хотите удалить эту версию?')">
-                    <i class="fas fa-trash"></i> Удалить
-                </a>
-                {% endif %}
-                <button class="btn btn-secondary" onclick="editChangelog('{{ version.id }}')">
-                    <i class="fas fa-edit"></i> Изменить changelog
-                </button>
-                <button class="btn btn-secondary" onclick="toggleFlagForm('{{ version.id }}')">
-                    <i class="fas fa-flag"></i> Добавить флаг
-                </button>
-                <button class="btn btn-secondary toggle-stable" onclick="toggleStable('{{ version.id }}')" data-version-id="{{ version.id }}">
-                    <i class="fas {% if version.is_stable %}fa-times-circle{% else %}fa-check-circle{% endif %}"></i>
-                    {% if version.is_stable %}
-                        Снять отметку стабильности
-                    {% else %}
-                        Отметить как стабильную
-                    {% endif %}
-                </button>
+                <div class="action-group">
+                    <a href="{{ url_for('main.download_version', id=version.id) }}" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Скачать
+                    </a>
+                    <span class="downloads-count">
+                        <i class="fas fa-download"></i> {{ version.downloads }}
+                    </span>
+                </div>
+                
+                <div class="action-group">
+                    <button type="button" class="btn" onclick="showAddFlagForm({{ version.id }})">
+                        <i class="fas fa-flag"></i> Добавить флаг
+                    </button>
+                    <button type="button" class="btn" onclick="showGenerateLinkForm({{ version.id }})">
+                        <i class="fas fa-link"></i> Создать ссылку
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDelete({{ version.id }})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
-
-            <form id="flag-form-{{ version.id }}" 
-                  class="flag-form" 
-                  style="display: none;"
-                  action="{{ url_for('main.add_flag', id=version.id) }}" 
-                  method="POST">
-                {{ flag_form.hidden_tag() }}
-                <div class="form-group">
-                    {{ flag_form.flag_type.label }}
-                    {{ flag_form.flag_type(class="form-control") }}
-                </div>
-                <div class="form-group">
-                    {{ flag_form.description.label }}
-                    {{ flag_form.description(class="form-control") }}
-                </div>
-                {{ flag_form.submit(class="btn") }}
-            </form>
         </div>
         {% endfor %}
     </div>
 </div>
 
+<!-- Модальное окно для добавления флага -->
+<div id="addFlagModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Добавить флаг</h2>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="addFlagForm" method="POST">
+                <div class="form-group">
+                    <label for="flag_type">Тип флага</label>
+                    <select name="flag_type" id="flag_type" class="form-control">
+                        <option value="bug">Ошибка</option>
+                        <option value="feature">Новая функция</option>
+                        <option value="warning">Предупреждение</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="description">Описание</label>
+                    <input type="text" name="description" id="description" class="form-control" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                    <button type="button" class="btn" onclick="closeModal('addFlagModal')">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для генерации ссылки -->
+<div id="generateLinkModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Создать ссылку для скачивания</h2>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div id="linkResult"></div>
+            <div class="form-actions">
+                <button type="button" class="btn" onclick="closeModal('generateLinkModal')">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-function toggleFlagForm(versionId) {
-    const form = document.getElementById(`flag-form-${versionId}`);
-    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+let currentVersionId = null;
+
+function showAddFlagForm(versionId) {
+    currentVersionId = versionId;
+    document.getElementById('addFlagForm').reset();
+    showModal('addFlagModal');
 }
 
-function toggleChangelog(versionId) {
-    const changelogWrapper = document.querySelector(`#changelog-${versionId} .changelog-wrapper`);
-    const expandButton = document.querySelector(`#changelog-${versionId} .changelog-expand i`);
+function showGenerateLinkForm(versionId) {
+    currentVersionId = versionId;
+    generateDownloadLink(versionId);
+    showModal('generateLinkModal');
+}
+
+function showModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.style.display = 'block';
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.style.display = 'none';
+}
+
+// Закрытие модального окна при клике на крестик
+document.querySelectorAll('.close').forEach(closeBtn => {
+    closeBtn.onclick = function() {
+        this.closest('.modal').style.display = 'none';
+    }
+});
+
+// Закрытие модального окна при клике вне его
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+
+// Обработка формы добавления флага
+document.getElementById('addFlagForm').onsubmit = function(e) {
+    e.preventDefault();
     
-    if (changelogWrapper.classList.contains('expanded')) {
-        changelogWrapper.classList.remove('expanded');
-        expandButton.classList.remove('fa-chevron-up');
-        expandButton.classList.add('fa-chevron-down');
-    } else {
-        changelogWrapper.classList.add('expanded');
-        expandButton.classList.remove('fa-chevron-down');
-        expandButton.classList.add('fa-chevron-up');
-    }
-}
-
-function editChangelog(versionId) {
-    const changelogContent = document.querySelector(`#changelog-${versionId}`);
-    if (!changelogContent) return;
-
-    const changelogWrapper = changelogContent.querySelector('.changelog-wrapper');
-    const changelogEdit = changelogContent.querySelector('.changelog-edit');
+    const formData = new FormData(this);
     
-    if (changelogWrapper) {
-        changelogWrapper.style.display = 'none';
-    }
-    if (changelogEdit) {
-        changelogEdit.style.display = 'block';
-    }
-}
-
-function cancelEditChangelog(versionId) {
-    const changelogContent = document.querySelector(`#changelog-${versionId}`);
-    if (!changelogContent) return;
-
-    const changelogWrapper = changelogContent.querySelector('.changelog-wrapper');
-    const changelogEdit = changelogContent.querySelector('.changelog-edit');
-    
-    if (changelogWrapper) {
-        changelogWrapper.style.display = 'block';
-    }
-    if (changelogEdit) {
-        changelogEdit.style.display = 'none';
-    }
-}
-
-function saveChangelog(versionId) {
-    const changelogContent = document.querySelector(`#changelog-${versionId}`);
-    if (!changelogContent) return;
-
-    const textarea = changelogContent.querySelector('.changelog-textarea');
-    if (!textarea) return;
-
-    const changelog = textarea.value;
-
-    fetch(`/version/${versionId}/edit_changelog`, {
+    fetch(`/version/${currentVersionId}/flag`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ changelog: changelog })
+        body: formData
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            const changelogText = changelogContent.querySelector('.changelog-text');
-            if (changelogText) {
-                // Если changelog пустой
-                if (!changelog.trim()) {
-                    changelogText.classList.add('changelog-empty');
-                    changelogText.textContent = 'Нет описания изменений';
-                    changelogContent.querySelector('.changelog-wrapper').style.display = 'none';
-                } else {
-                    changelogText.classList.remove('changelog-empty');
-                    changelogText.textContent = changelog;
-                    changelogContent.querySelector('.changelog-wrapper').style.display = 'block';
-                }
-            }
-            
-            // Обновляем отображение
-            cancelEditChangelog(versionId);
+            location.reload();
         } else {
-            alert('Ошибка при сохранении changelog');
+            alert(data.error || 'Произошла ошибка');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Ошибка при сохранении changelog');
-    });
-}
-
-function toggleStable(versionId) {
-    fetch(`/version/${versionId}/toggle_stable`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            const button = document.querySelector(`.toggle-stable[data-version-id="${versionId}"]`);
-            const icon = button.querySelector('i');
-            const badge = document.querySelector(`#version-${versionId} .stable-badge`);
-            
-            if (data.is_stable) {
-                // Добавляем значок стабильной версии
-                icon.classList.remove('fa-check-circle');
-                icon.classList.add('fa-times-circle');
-                button.innerHTML = `<i class="fas fa-times-circle"></i> Снять отметку стабильности`;
-                
-                if (!badge) {
-                    const titleDiv = document.querySelector(`#version-${versionId} .version-title`);
-                    const newBadge = document.createElement('span');
-                    newBadge.className = 'stable-badge';
-                    newBadge.innerHTML = '<i class="fas fa-check-circle"></i> Стабильная версия';
-                    titleDiv.appendChild(newBadge);
-                }
-            } else {
-                // Убираем значок стабильной версии
-                icon.classList.remove('fa-times-circle');
-                icon.classList.add('fa-check-circle');
-                button.innerHTML = `<i class="fas fa-check-circle"></i> Отметить как стабильную`;
-                
-                if (badge) {
-                    badge.remove();
-                }
-            }
-        } else {
-            alert('Ошибка при изменении статуса версии');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Ошибка при изменении статуса версии');
+        alert('Произошла ошибка при добавлении флага');
     });
 }
 
 function generateDownloadLink(versionId) {
+    const resultDiv = document.getElementById('linkResult');
+    resultDiv.innerHTML = '<div class="loading">Генерация ссылки...</div>';
+    
     fetch(`/version/${versionId}/generate_link`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
+        method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Создаем модальное окно
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <h3>Одноразовая ссылка создана</h3>
+            const link = `${window.location.origin}/download/${data.token}`;
+            resultDiv.innerHTML = `
+                <div class="success-message">Ссылка создана!</div>
+                <div class="download-link">
+                    <input type="text" value="${link}" readonly class="form-control">
+                    <button class="btn btn-primary" onclick="copyToClipboard('${link}')">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <div class="link-info">
                     <p>Ссылка действительна до: ${data.expires_at}</p>
-                    <div class="link-container">
-                        <input type="text" value="${data.download_url}" readonly class="link-input">
-                        <button onclick="copyLink(this)" class="btn btn-secondary">
-                            <i class="fas fa-copy"></i> Копировать
-                        </button>
-                    </div>
-                    <p class="link-warning">Внимание: ссылка может быть использована только один раз!</p>
-                    <button onclick="closeModal(this)" class="btn btn-primary">Закрыть</button>
+                    <p>Ссылка будет работать только один раз</p>
                 </div>
             `;
-            document.body.appendChild(modal);
         } else {
-            alert('Ошибка при создании ссылки');
+            resultDiv.innerHTML = `<div class="error-message">${data.error || 'Произошла ошибка'}</div>`;
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Ошибка при создании ссылки');
+        resultDiv.innerHTML = '<div class="error-message">Произошла ошибка при создании ссылки</div>';
     });
 }
 
-function copyLink(button) {
-    const input = button.parentElement.querySelector('.link-input');
-    input.select();
-    document.execCommand('copy');
-    
-    // Меняем текст кнопки на короткое время
-    const originalText = button.innerHTML;
-    button.innerHTML = '<i class="fas fa-check"></i> Скопировано';
-    setTimeout(() => {
-        button.innerHTML = originalText;
-    }, 2000);
-}
-
-function closeModal(button) {
-    const modal = button.closest('.modal');
-    modal.remove();
-}
-
-function createBranchSelect(version) {
-    const branches = ['release', 'debug', 'beta', 'alpha'];
-    const select = document.createElement('select');
-    select.className = 'branch-select form-control';
-    select.style.display = 'none';
-    select.style.position = 'absolute';
-    select.style.zIndex = '1000';
-    
-    branches.forEach(branch => {
-        const option = document.createElement('option');
-        option.value = branch;
-        option.textContent = branch;
-        if (branch === version.branch) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
-    
-    return select;
-}
-
-function updateBranchClass(branchSpan) {
-    // Удаляем все существующие классы branch
-    branchSpan.classList.remove('release', 'debug', 'beta', 'alpha');
-    // Добавляем класс соответствующий текущему branch
-    branchSpan.classList.add(branchSpan.textContent.trim());
-}
-
-function initializeBranchEditing() {
-    document.querySelectorAll('.version-branch').forEach(branchSpan => {
-        const versionId = branchSpan.dataset.versionId;
-        const select = createBranchSelect({
-            branch: branchSpan.textContent.trim()
-        });
-        
-        // Инициализируем класс для текущего branch
-        updateBranchClass(branchSpan);
-        
-        branchSpan.parentNode.appendChild(select);
-        
-        branchSpan.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const rect = branchSpan.getBoundingClientRect();
-            select.style.top = `${rect.top}px`;
-            select.style.left = `${rect.left}px`;
-            select.style.display = 'block';
-            select.focus();
-        });
-        
-        select.addEventListener('change', async () => {
-            try {
-                const response = await fetch(`/version/${versionId}/change_branch`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        branch: select.value
-                    })
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    branchSpan.textContent = data.branch;
-                    updateBranchClass(branchSpan);
-                    select.style.display = 'none';
-                } else {
-                    alert(data.error || 'Ошибка при изменении branch');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Ошибка при изменении branch');
-            }
-        });
-        
-        // Скрываем select при клике вне него
-        document.addEventListener('click', (e) => {
-            if (e.target !== select && e.target !== branchSpan) {
-                select.style.display = 'none';
-            }
-        });
-        
-        // Скрываем при потере фокуса
-        select.addEventListener('blur', () => {
-            setTimeout(() => {
-                select.style.display = 'none';
-            }, 200);
-        });
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Ссылка скопирована в буфер обмена');
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
     });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    initializeBranchEditing();
-    // ... existing code ...
-});
+function confirmDelete(versionId) {
+    if (confirm('Вы уверены, что хотите удалить эту версию?')) {
+        window.location.href = `/version/${versionId}/delete`;
+    }
+}
 </script>
+{% endblock %}
 
+{% block styles %}
 <style>
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.app-info {
+    flex-grow: 1;
+}
+
+.app-info h1 {
+    margin: 0;
+    color: var(--text-color);
+}
+
+.package-name {
+    display: block;
+    color: var(--text-muted);
+    font-family: monospace;
+    margin-top: 5px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.app-description {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 30px;
+    color: var(--text-color);
+}
+
+.versions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.version-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.version-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.version-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.version-number {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.branch-tag {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.9em;
+}
+
+.branch-tag.release {
+    background-color: #4caf50;
+    color: white;
+}
+
+.branch-tag.debug {
+    background-color: #ff9800;
+    color: white;
+}
+
+.branch-tag.beta {
+    background-color: #2196f3;
+    color: white;
+}
+
+.branch-tag.alpha {
+    background-color: #f44336;
+    color: white;
+}
+
+.stable-tag {
+    color: #4caf50;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.version-meta {
+    display: flex;
+    gap: 15px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-changelog {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.version-changelog pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+}
+
+.version-flags {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 15px 0;
+}
+
+.flag-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.flag-item.bug {
+    background-color: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+
+.flag-item.feature {
+    background-color: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+}
+
+.flag-item.warning {
+    background-color: rgba(255, 152, 0, 0.1);
+    color: #ff9800;
+}
+
+.flag-text {
+    flex-grow: 1;
+}
+
+.flag-meta {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.version-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.action-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.downloads-count {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
 .modal {
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
     z-index: 1000;
 }
 
 .modal-content {
+    position: relative;
     background-color: var(--bg-color);
+    margin: 10% auto;
     padding: 20px;
     border-radius: 8px;
     max-width: 500px;
     width: 90%;
 }
 
-.link-container {
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+}
+
+.close {
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.close:hover {
+    color: var(--text-color);
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+}
+
+.success-message {
+    color: #4caf50;
+    margin-bottom: 15px;
+}
+
+.error-message {
+    color: #f44336;
+    margin-bottom: 15px;
+}
+
+.download-link {
     display: flex;
     gap: 10px;
-    margin: 15px 0;
+    margin-bottom: 15px;
 }
 
-.link-input {
+.download-link input {
     flex-grow: 1;
-    padding: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background-color: var(--bg-secondary);
-    color: var(--text-color);
-    font-family: monospace;
 }
 
-.link-warning {
-    color: var(--danger-color);
+.link-info {
+    color: var(--text-muted);
     font-size: 0.9em;
-    margin: 10px 0;
+}
+
+.link-info p {
+    margin: 5px 0;
 }
 
 @media (max-width: 768px) {
-    .link-container {
+    .app-header {
         flex-direction: column;
+        gap: 15px;
     }
     
-    .link-container button {
-        width: 100%;
+    .version-header {
+        flex-direction: column;
+        gap: 10px;
     }
-}
-
-.version-branch {
-    cursor: pointer;
-    padding: 2px 5px;
-    border-radius: 3px;
-    font-weight: 500;
-    font-size: 0.9em;
-}
-
-.version-branch.release {
-    background-color: rgba(40, 167, 69, 0.15);
-    color: #28a745;
-    border: 1px solid rgba(40, 167, 69, 0.2);
-}
-
-.version-branch.debug {
-    background-color: rgba(220, 53, 69, 0.15);
-    color: #dc3545;
-    border: 1px solid rgba(220, 53, 69, 0.2);
-}
-
-.version-branch.beta {
-    background-color: rgba(255, 193, 7, 0.15);
-    color: #ffc107;
-    border: 1px solid rgba(255, 193, 7, 0.2);
-}
-
-.version-branch.alpha {
-    background-color: rgba(23, 162, 184, 0.15);
-    color: #17a2b8;
-    border: 1px solid rgba(23, 162, 184, 0.2);
-}
-
-.version-branch:hover {
-    filter: brightness(0.95);
-}
-
-.branch-select {
-    min-width: 100px;
-    padding: 2px;
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-    background-color: var(--bg-color);
-    color: var(--text-color);
+    
+    .version-actions {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .action-group {
+        width: 100%;
+        justify-content: center;
+    }
 }
 </style>
 {% endblock %} 
