@@ -313,9 +313,11 @@ def new_application():
 @login_required
 def application_details(id):
     application = Application.query.get_or_404(id)
+    versions = ApkVersion.query.filter_by(application_id=id).order_by(ApkVersion.upload_date.desc()).all()
     flag_form = AddFlagForm()
     return render_template('application_details.html', 
                          application=application,
+                         versions=versions,
                          flag_form=flag_form)
 
 @main.route('/application/<int:id>/upload', methods=['GET', 'POST'])
