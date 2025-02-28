@@ -390,24 +390,96 @@ def upload_version(id):
 @login_required
 def add_flag(id):
     version = ApkVersion.query.get_or_404(id)
-    form = AddFlagForm()
     
-    if form.validate_on_submit():
-        try:
+    # Проверяем, является ли запрос AJAX-запросом
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
+    # Отладочная информация
+    current_app.logger.info(f"Добавление флага для версии {id}")
+    current_app.logger.info(f"AJAX запрос: {is_ajax}")
+    current_app.logger.info(f"Метод запроса: {request.method}")
+    current_app.logger.info(f"Заголовки запроса: {dict(request.headers)}")
+    current_app.logger.info(f"Данные формы: {dict(request.form)}")
+    
+    try:
+        # Для AJAX-запросов используем данные из request.form
+        if is_ajax:
+            flag_type = request.form.get('flag_type')
+            description = request.form.get('description')
+            
+            current_app.logger.info(f"Тип флага: {flag_type}")
+            current_app.logger.info(f"Описание: {description}")
+            
+            if not flag_type or not description:
+                return jsonify({'success': False, 'error': 'Не указан тип флага или описание'})
+            
+            # Проверяем, что тип флага допустимый
+            valid_flag_types = ['bug', 'feature', 'warning']
+            if flag_type not in valid_flag_types:
+                return jsonify({'success': False, 'error': 'Недопустимый тип флага'})
+            
+            # Проверяем длину описания
+            if len(description) > 255:
+                return jsonify({'success': False, 'error': 'Описание слишком длинное (максимум 255 символов)'})
+            
             flag = VersionFlag(
                 version_id=version.id,
-                flag_type=form.flag_type.data,
-                description=form.description.data,
+                flag_type=flag_type,
+                description=description,
                 created_by=current_user
             )
-            db.session.add(flag)
-            db.session.commit()
-            return jsonify({'success': True, 'message': 'Флаг добавлен'})
-        except Exception as e:
-            db.session.rollback()
+            
+            try:
+                db.session.add(flag)
+                db.session.commit()
+                
+                # Логируем добавление флага
+                UserActionLog.log_action(
+                    current_user,
+                    'add_flag',
+                    'version_flag',
+                    flag.id,
+                    None,
+                    {
+                        'version_id': version.id,
+                        'flag_type': flag.flag_type,
+                        'description': flag.description
+                    },
+                    f'Добавлен флаг "{flag.description}" к версии {version.version_number}'
+                )
+                
+                return jsonify({'success': True, 'message': 'Флаг добавлен'})
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Ошибка при сохранении флага: {str(e)}")
+                return jsonify({'success': False, 'error': f'Ошибка при сохранении флага: {str(e)}'})
+        else:
+            # Для обычных запросов используем форму
+            form = AddFlagForm()
+            if form.validate_on_submit():
+                flag = VersionFlag(
+                    version_id=version.id,
+                    flag_type=form.flag_type.data,
+                    description=form.description.data,
+                    created_by=current_user
+                )
+                db.session.add(flag)
+                db.session.commit()
+                
+                flash('Флаг добавлен')
+                return redirect(url_for('main.application_details', id=version.application_id))
+            else:
+                flash('Ошибка при добавлении флага')
+                return redirect(url_for('main.application_details', id=version.application_id))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Ошибка при добавлении флага: {str(e)}")
+        
+        if is_ajax:
             return jsonify({'success': False, 'error': str(e)})
-    
-    return jsonify({'success': False, 'error': 'Неверные данные формы'})
+        else:
+            flash(f'Ошибка: {str(e)}')
+            return redirect(url_for('main.application_details', id=version.application_id))
 
 @main.route('/version/<int:id>/download')
 @login_required
@@ -544,12 +616,31 @@ def edit_changelog(id):
 def toggle_stable(id):
     version = ApkVersion.query.get_or_404(id)
     
+    # Отладочная информация
+    current_app.logger.info(f"Переключение стабильной версии для версии {id}")
+    current_app.logger.info(f"Текущее значение is_stable: {version.is_stable}")
+    current_app.logger.info(f"Метод запроса: {request.method}")
+    current_app.logger.info(f"Заголовки запроса: {dict(request.headers)}")
+    
     try:
         version.is_stable = not version.is_stable
         db.session.commit()
         
         status = 'стабильной' if version.is_stable else 'нестабильной'
         flash(f'Версия {version.version_number} отмечена как {status}')
+        
+        current_app.logger.info(f"Новое значение is_stable: {version.is_stable}")
+        
+        # Логируем изменение статуса стабильности
+        UserActionLog.log_action(
+            current_user,
+            'toggle_stable',
+            'version',
+            version.id,
+            {'is_stable': not version.is_stable},
+            {'is_stable': version.is_stable},
+            f'Версия {version.version_number} отмечена как {status}'
+        )
         
         return jsonify({
             'success': True,
@@ -558,6 +649,7 @@ def toggle_stable(id):
         })
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Ошибка при переключении стабильной версии: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 @main.route('/version/<int:id>/change_branch', methods=['POST'])

@@ -102,10 +102,11 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Добавить флаг</h2>
-            <span class="close">&times;</span>
+            <span class="close" onclick="closeModal('addFlagModal')">&times;</span>
         </div>
         <div class="modal-body">
             <form id="addFlagForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label for="flag_type">Тип флага</label>
                     <select name="flag_type" id="flag_type" class="form-control">
@@ -116,7 +117,7 @@
                 </div>
                 <div class="form-group">
                     <label for="description">Описание</label>
-                    <input type="text" name="description" id="description" class="form-control" required>
+                    <input type="text" name="description" id="description" class="form-control" required maxlength="255">
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Добавить</button>
@@ -192,19 +193,29 @@ document.getElementById('addFlagForm').onsubmit = function(e) {
     
     fetch(`/version/${currentVersionId}/flag`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Ошибка сети');
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
+            closeModal('addFlagModal');
             location.reload();
         } else {
-            alert(data.error || 'Произошла ошибка');
+            alert(data.error || 'Произошла ошибка при добавлении флага');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Произошла ошибка при добавлении флага');
+        alert('Произошла ошибка при добавлении флага: ' + error.message);
     });
 }
 
