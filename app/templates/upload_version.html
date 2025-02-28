@@ -9,7 +9,14 @@
         <span class="app-name">{{ application.name }}</span>
     </div>
     
-    <div class="upload-container" id="dropZone">
+    <!-- Вкладки для переключения между одиночной и множественной загрузкой -->
+    <div class="upload-tabs">
+        <button class="tab-btn active" id="singleUploadTab">Загрузка одного файла</button>
+        <button class="tab-btn" id="multiUploadTab">Загрузка нескольких файлов</button>
+    </div>
+    
+    <!-- Форма для одиночной загрузки -->
+    <div class="upload-container" id="singleUploadForm">
         <form method="POST" enctype="multipart/form-data" id="uploadForm">
             {{ form.hidden_tag() }}
             
@@ -85,12 +92,124 @@
             </div>
         </form>
     </div>
+    
+    <!-- Форма для множественной загрузки -->
+    <div class="upload-container" id="multiUploadForm" style="display: none;">
+        <form method="POST" enctype="multipart/form-data" id="multiForm">
+            {{ multi_form.hidden_tag() }}
+            
+            <div class="multi-upload-area" id="multiDropZone">
+                <div class="upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="upload-text">
+                    <p>Перетащите APK файлы сюда или</p>
+                    <div class="file-upload-wrapper">
+                        {{ multi_form.apk_files(class="form-control-file", id="multiFileInput", multiple=True) }}
+                        <label for="multiFileInput" class="btn btn-outline">Выберите файлы</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="multiFilesPreview" class="multi-files-preview">
+                <div class="files-list" id="filesList"></div>
+            </div>
+            
+            <div class="form-actions multi-actions">
+                <button type="button" class="btn btn-primary" id="saveAllBtn" style="display: none;">Сохранить все файлы</button>
+                <a href="{{ url_for('main.application_details', id=application.id) }}" class="btn">Отмена</a>
+            </div>
+        </form>
+    </div>
 </div>
+
+<!-- Шаблон для карточки файла -->
+<template id="fileCardTemplate">
+    <div class="file-card">
+        <div class="file-card-header">
+            <div class="file-info">
+                <i class="fas fa-file-archive"></i>
+                <span class="file-name"></span>
+                <span class="file-size"></span>
+            </div>
+            <div class="file-actions">
+                <button type="button" class="btn-edit" title="Редактировать метаданные">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button type="button" class="btn-remove" title="Удалить файл">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="file-progress">
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                <div class="progress-text">Ожидание загрузки...</div>
+            </div>
+        </div>
+        
+        <div class="file-metadata" style="display: none;">
+            <div class="form-group">
+                <label>Номер версии</label>
+                <input type="text" class="form-control version-input" placeholder="Например: 4.2.57.4">
+            </div>
+            
+            <div class="form-group">
+                <label>Тип сборки</label>
+                <select class="form-control branch-select">
+                    <option value="release">Release</option>
+                    <option value="debug">Debug</option>
+                    <option value="beta">Beta</option>
+                    <option value="alpha">Alpha</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Список изменений</label>
+                <textarea class="form-control changelog-input" rows="3" placeholder="Опишите изменения в этой версии..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-container">
+                    <input type="checkbox" class="form-check-input stable-checkbox">
+                    Стабильная версия
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>Флаги</label>
+                <div class="flags-container">
+                    <div class="flags-list"></div>
+                    <button type="button" class="btn btn-sm btn-outline add-flag-btn">Добавить флаг</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Шаблон для флага -->
+<template id="flagTemplate">
+    <div class="flag-item">
+        <div class="flag-content">
+            <select class="form-control flag-type">
+                <option value="bug">Ошибка</option>
+                <option value="feature">Новая функция</option>
+                <option value="warning">Предупреждение</option>
+            </select>
+            <input type="text" class="form-control flag-description" placeholder="Описание флага">
+            <button type="button" class="btn-remove-flag">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</template>
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Одиночная загрузка
     const fileInput = document.getElementById('fileInput');
     const filePreview = document.getElementById('filePreview');
     const fileName = document.getElementById('fileName');
@@ -104,6 +223,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressBar = document.querySelector('.progress');
     const progressBarInner = document.querySelector('.progress-bar');
     const progressText = document.querySelector('.progress-text');
+    
+    // Множественная загрузка
+    const multiFileInput = document.getElementById('multiFileInput');
+    const multiDropZone = document.getElementById('multiDropZone');
+    const filesList = document.getElementById('filesList');
+    const saveAllBtn = document.getElementById('saveAllBtn');
+    
+    // Вкладки
+    const singleUploadTab = document.getElementById('singleUploadTab');
+    const multiUploadTab = document.getElementById('multiUploadTab');
+    const singleUploadForm = document.getElementById('singleUploadForm');
+    const multiUploadForm = document.getElementById('multiUploadForm');
+    
+    // Переключение вкладок
+    singleUploadTab.addEventListener('click', function() {
+        singleUploadTab.classList.add('active');
+        multiUploadTab.classList.remove('active');
+        singleUploadForm.style.display = 'block';
+        multiUploadForm.style.display = 'none';
+    });
+    
+    multiUploadTab.addEventListener('click', function() {
+        multiUploadTab.classList.add('active');
+        singleUploadTab.classList.remove('active');
+        multiUploadForm.style.display = 'block';
+        singleUploadForm.style.display = 'none';
+    });
     
     function formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
@@ -128,6 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return null;
     }
     
+    // Одиночная загрузка
     function updateFileInfo(file) {
         if (file) {
             fileName.textContent = file.name;
@@ -195,28 +342,232 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFileInfo(null);
     });
     
-    // Drag and drop functionality
-    dropZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
+    // Множественная загрузка
+    let uploadedFiles = [];
     
-    dropZone.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-    });
-    
-    dropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
+    function createFileCard(file) {
+        const template = document.getElementById('fileCardTemplate');
+        const fileCard = document.importNode(template.content, true).querySelector('.file-card');
         
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            fileInput.files = dataTransfer.files;
-            updateFileInfo(file);
+        // Заполняем информацию о файле
+        fileCard.querySelector('.file-name').textContent = file.name;
+        fileCard.querySelector('.file-size').textContent = formatFileSize(file.size);
+        
+        // Добавляем данные о файле
+        fileCard.dataset.filename = file.name;
+        
+        // Попытка распарсить имя файла
+        const fileInfo = parseFileName(file.name);
+        if (fileInfo) {
+            fileCard.querySelector('.version-input').value = fileInfo.version;
+            fileCard.querySelector('.branch-select').value = fileInfo.branch;
         }
+        
+        // Обработчики событий
+        fileCard.querySelector('.btn-edit').addEventListener('click', function() {
+            const metadata = fileCard.querySelector('.file-metadata');
+            if (metadata.style.display === 'none') {
+                metadata.style.display = 'block';
+            } else {
+                metadata.style.display = 'none';
+            }
+        });
+        
+        fileCard.querySelector('.btn-remove').addEventListener('click', function() {
+            // Удаляем файл из списка
+            uploadedFiles = uploadedFiles.filter(f => f.name !== file.name);
+            fileCard.remove();
+            
+            // Скрываем кнопку сохранения, если нет файлов
+            if (uploadedFiles.length === 0) {
+                saveAllBtn.style.display = 'none';
+            }
+        });
+        
+        // Добавление флагов
+        fileCard.querySelector('.add-flag-btn').addEventListener('click', function() {
+            addFlagToCard(fileCard);
+        });
+        
+        return fileCard;
+    }
+    
+    function addFlagToCard(fileCard) {
+        const template = document.getElementById('flagTemplate');
+        const flagItem = document.importNode(template.content, true).querySelector('.flag-item');
+        const flagsList = fileCard.querySelector('.flags-list');
+        
+        // Добавляем обработчик для удаления флага
+        flagItem.querySelector('.btn-remove-flag').addEventListener('click', function() {
+            flagItem.remove();
+        });
+        
+        flagsList.appendChild(flagItem);
+    }
+    
+    function uploadFile(file, fileCard, formData) {
+        if (!formData) {
+            formData = new FormData();
+            formData.append('files[]', file);
+        }
+        
+        const xhr = new XMLHttpRequest();
+        const progressBar = fileCard.querySelector('.progress-bar');
+        const progressText = fileCard.querySelector('.progress-text');
+        
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.style.width = percentComplete + '%';
+                progressText.textContent = 'Загрузка: ' + Math.round(percentComplete) + '%';
+            }
+        });
+        
+        xhr.addEventListener('load', function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        progressText.textContent = 'Загружено';
+                        fileCard.classList.add('uploaded');
+                        
+                        // Показываем метаданные
+                        fileCard.querySelector('.file-metadata').style.display = 'block';
+                    } else {
+                        progressText.textContent = 'Ошибка: ' + (response.error || 'Неизвестная ошибка');
+                        fileCard.classList.add('error');
+                    }
+                } catch (e) {
+                    progressText.textContent = 'Ошибка при обработке ответа';
+                    fileCard.classList.add('error');
+                }
+            } else {
+                progressText.textContent = 'Ошибка: ' + xhr.status;
+                fileCard.classList.add('error');
+            }
+        });
+        
+        xhr.addEventListener('error', function() {
+            progressText.textContent = 'Ошибка сети';
+            fileCard.classList.add('error');
+        });
+        
+        xhr.open('POST', `/application/{{ application.id }}/multi_temp_upload`);
+        xhr.send(formData);
+    }
+    
+    function addFiles(files) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            
+            // Проверяем, что файл еще не добавлен
+            if (uploadedFiles.some(f => f.name === file.name)) {
+                continue;
+            }
+            
+            // Добавляем файл в список
+            uploadedFiles.push(file);
+            
+            // Создаем карточку файла
+            const fileCard = createFileCard(file);
+            filesList.appendChild(fileCard);
+            
+            // Загружаем файл
+            const formData = new FormData();
+            formData.append('files[]', file);
+            uploadFile(file, fileCard, formData);
+        }
+        
+        // Показываем кнопку сохранения, если есть файлы
+        if (uploadedFiles.length > 0) {
+            saveAllBtn.style.display = 'block';
+        }
+    }
+    
+    multiFileInput.addEventListener('change', function(e) {
+        addFiles(e.target.files);
+    });
+    
+    // Drag and drop для множественной загрузки
+    multiDropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        multiDropZone.classList.add('dragover');
+    });
+    
+    multiDropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        multiDropZone.classList.remove('dragover');
+    });
+    
+    multiDropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        multiDropZone.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length > 0) {
+            addFiles(e.dataTransfer.files);
+        }
+    });
+    
+    // Сохранение всех файлов
+    saveAllBtn.addEventListener('click', function() {
+        const fileCards = document.querySelectorAll('.file-card.uploaded');
+        if (fileCards.length === 0) {
+            alert('Нет загруженных файлов для сохранения');
+            return;
+        }
+        
+        const versions = [];
+        
+        fileCards.forEach(card => {
+            const flags = [];
+            const flagItems = card.querySelectorAll('.flag-item');
+            
+            flagItems.forEach(item => {
+                flags.push({
+                    type: item.querySelector('.flag-type').value,
+                    description: item.querySelector('.flag-description').value
+                });
+            });
+            
+            versions.push({
+                filename: card.dataset.filename,
+                version_number: card.querySelector('.version-input').value,
+                branch: card.querySelector('.branch-select').value,
+                changelog: card.querySelector('.changelog-input').value,
+                is_stable: card.querySelector('.stable-checkbox').checked,
+                flags: flags
+            });
+        });
+        
+        // Отправляем данные на сервер
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/application/{{ application.id }}/save_multi_upload`);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('X-CSRFToken', document.querySelector('input[name="csrf_token"]').value);
+        
+        xhr.addEventListener('load', function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        alert('Файлы успешно сохранены');
+                        window.location.href = `/application/{{ application.id }}`;
+                    } else {
+                        alert('Ошибка: ' + (response.error || 'Неизвестная ошибка'));
+                    }
+                } catch (e) {
+                    alert('Ошибка при обработке ответа');
+                }
+            } else {
+                alert('Ошибка: ' + xhr.status);
+            }
+        });
+        
+        xhr.addEventListener('error', function() {
+            alert('Ошибка сети');
+        });
+        
+        xhr.send(JSON.stringify({ versions: versions }));
     });
 });
 </script>
@@ -234,6 +585,34 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-right: 15px;
 }
 
+/* Стили для вкладок */
+.upload-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    color: var(--text-color);
+}
+
+.tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* Стили для одиночной загрузки */
 .upload-container {
     border: 2px dashed var(--border-color);
     border-radius: 8px;
@@ -360,6 +739,192 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-top: 30px;
 }
 
+/* Стили для множественной загрузки */
+.multi-upload-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-secondary);
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.multi-upload-area.dragover {
+    border-color: var(--primary-color);
+    background-color: var(--bg-hover);
+}
+
+.upload-icon {
+    font-size: 48px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+
+.upload-text {
+    text-align: center;
+}
+
+.upload-text p {
+    margin-bottom: 15px;
+    color: var(--text-muted);
+}
+
+#multiFileInput {
+    display: none;
+}
+
+.btn-outline {
+    border: 1px solid var(--primary-color);
+    background: none;
+    color: var(--primary-color);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.multi-files-preview {
+    margin-top: 20px;
+}
+
+.files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.file-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: var(--bg-color);
+}
+
+.file-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.file-info i {
+    color: var(--primary-color);
+}
+
+.file-size {
+    color: var(--text-muted);
+    margin-left: 10px;
+}
+
+.file-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-edit, .btn-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+}
+
+.btn-edit {
+    color: var(--primary-color);
+}
+
+.btn-edit:hover {
+    color: var(--primary-color-hover);
+}
+
+.btn-remove {
+    color: var(--danger-color);
+}
+
+.btn-remove:hover {
+    color: var(--danger-color-hover);
+}
+
+.file-progress {
+    padding: 15px;
+}
+
+.file-metadata {
+    padding: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.flags-container {
+    margin-top: 10px;
+}
+
+.flags-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.flag-item {
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.flag-content {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.flag-type {
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.flag-description {
+    flex-grow: 1;
+}
+
+.btn-remove-flag {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    padding: 5px;
+}
+
+.btn-remove-flag:hover {
+    color: var(--danger-color-hover);
+}
+
+.add-flag-btn {
+    margin-top: 5px;
+}
+
+.file-card.uploaded .progress-bar {
+    background-color: var(--success-color);
+}
+
+.file-card.error .progress-bar {
+    background-color: var(--danger-color);
+}
+
 @media (max-width: 768px) {
     .upload-container {
         padding: 20px;
@@ -371,6 +936,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .form-actions .btn {
         width: 100%;
+    }
+    
+    .multi-upload-area {
+        padding: 20px;
     }
 }
 </style>

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, Category, Application, ApkVersion, VersionFlag, Role, UserActionLog, OneTimeDownloadLink
 from app.forms import (LoginForm, CategoryForm, ApplicationForm, UploadApkForm, 
-                      AddFlagForm, UserForm, RoleForm)
+                      AddFlagForm, UserForm, RoleForm, MultiUploadApkForm)
 from config import Config
 from app import db
 import os
@@ -325,6 +325,7 @@ def application_details(id):
 def upload_version(id):
     application = Application.query.get_or_404(id)
     form = UploadApkForm()
+    multi_form = MultiUploadApkForm()
     
     if form.validate_on_submit():
         file = form.apk_file.data
@@ -384,7 +385,7 @@ def upload_version(id):
                 os.remove(filepath)
             flash(f'Ошибка при сохранении версии: {str(e)}', 'error')
     
-    return render_template('upload_version.html', form=form, application=application)
+    return render_template('upload_version.html', form=form, multi_form=multi_form, application=application)
 
 @main.route('/version/<int:id>/flag', methods=['POST'])
 @login_required
@@ -803,4 +804,180 @@ def download_by_link(token):
         )
     except Exception as e:
         flash(f'Ошибка при скачивании файла: {str(e)}')
-        return redirect(url_for('main.index')) 
+        return redirect(url_for('main.index'))
+
+@main.route('/application/<int:id>/multi_temp_upload', methods=['POST'])
+@login_required
+def multi_temp_upload(id):
+    try:
+        application = Application.query.get_or_404(id)
+        
+        if 'files[]' not in request.files:
+            return jsonify({'error': 'Файлы не найдены'}), 400
+            
+        files = request.files.getlist('files[]')
+        results = []
+        
+        # Создаем временную директорию, если её нет
+        temp_folder = os.path.join(Config.UPLOAD_FOLDER, 'temp', str(id))
+        if not os.path.exists(temp_folder):
+            os.makedirs(temp_folder)
+            
+        for file in files:
+            if not file:
+                continue
+                
+            # Проверяем размер файла
+            if file.content_length and file.content_length > Config.MAX_FILE_SIZE:
+                results.append({
+                    'filename': file.filename,
+                    'success': False,
+                    'error': f'Файл превышает максимальный размер ({Config.MAX_FILE_SIZE / (1024*1024):.0f} MB)'
+                })
+                continue
+            
+            filename = secure_filename(file.filename)
+            
+            try:
+                package_name, version_number, branch = ApkVersion.parse_filename(filename)
+                
+                if not package_name or package_name != application.package_name:
+                    results.append({
+                        'filename': filename,
+                        'success': False,
+                        'error': f'Файл не соответствует формату: {application.package_name}-vX.X.X-branch.apk'
+                    })
+                    continue
+                
+                # Сохраняем файл во временную директорию
+                temp_path = os.path.join(temp_folder, filename)
+                file.save(temp_path)
+                
+                results.append({
+                    'success': True,
+                    'filename': filename,
+                    'version_number': version_number,
+                    'branch': branch,
+                    'file_size': os.path.getsize(temp_path),
+                    'temp_path': temp_path
+                })
+            except Exception as e:
+                results.append({
+                    'filename': filename,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@main.route('/application/<int:id>/save_multi_upload', methods=['POST'])
+@login_required
+def save_multi_upload(id):
+    try:
+        application = Application.query.get_or_404(id)
+        data = request.json
+        
+        if not data or 'versions' not in data:
+            return jsonify({'error': 'Данные не предоставлены'}), 400
+            
+        versions_data = data['versions']
+        saved_versions = []
+        
+        for version_data in versions_data:
+            try:
+                # Получаем путь к временному файлу
+                temp_path = os.path.join(
+                    Config.UPLOAD_FOLDER, 
+                    'temp', 
+                    str(id), 
+                    version_data['filename']
+                )
+                
+                if not os.path.exists(temp_path):
+                    continue
+                    
+                # Перемещаем файл из временной директории в постоянную
+                target_path = os.path.join(
+                    Config.UPLOAD_FOLDER, 
+                    version_data['filename']
+                )
+                
+                # Если файл уже существует, удаляем его
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                    
+                # Перемещаем файл
+                shutil.move(temp_path, target_path)
+                
+                # Создаем новую версию
+                version = ApkVersion(
+                    application=application,
+                    version_number=version_data['version_number'],
+                    branch=version_data['branch'],
+                    changelog=version_data.get('changelog', ''),
+                    is_stable=version_data.get('is_stable', False),
+                    filename=version_data['filename'],
+                    file_size=os.path.getsize(target_path),
+                    uploader=current_user
+                )
+                
+                db.session.add(version)
+                
+                # Добавляем флаги, если они есть
+                if 'flags' in version_data and version_data['flags']:
+                    for flag_data in version_data['flags']:
+                        flag = VersionFlag(
+                            version=version,
+                            flag_type=flag_data['type'],
+                            description=flag_data['description'],
+                            created_by=current_user
+                        )
+                        db.session.add(flag)
+                
+                saved_versions.append({
+                    'version_number': version.version_number,
+                    'branch': version.branch,
+                    'filename': version.filename
+                })
+                
+                # Логируем действие
+                UserActionLog.log_action(
+                    current_user,
+                    'upload_version',
+                    'apk_version',
+                    version.id,
+                    None,
+                    {
+                        'version': version.version_number,
+                        'branch': version.branch,
+                        'is_stable': version.is_stable,
+                        'filename': version.filename
+                    },
+                    f'Загружена новая версия {version.version_number} для {application.package_name}'
+                )
+                
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({
+                    'success': False, 
+                    'error': f'Ошибка при сохранении версии {version_data["filename"]}: {str(e)}'
+                }), 500
+        
+        # Сохраняем все изменения в базе данных
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Успешно сохранено {len(saved_versions)} версий',
+            'saved_versions': saved_versions
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500 
