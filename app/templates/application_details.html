@@ -84,6 +84,9 @@
                     <button type="button" class="btn" onclick="showGenerateLinkForm({{ version.id }})">
                         <i class="fas fa-link"></i> Создать ссылку
                     </button>
+                    <button type="button" class="btn" onclick="toggleStable({{ version.id }})">
+                        <i class="fas fa-check-circle"></i> {% if version.is_stable %}Снять отметку стабильной{% else %}Отметить как стабильную{% endif %}
+                    </button>
                     <button type="button" class="btn btn-danger" onclick="confirmDelete({{ version.id }})">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -250,6 +253,26 @@ function copyToClipboard(text) {
 function confirmDelete(versionId) {
     if (confirm('Вы уверены, что хотите удалить эту версию?')) {
         window.location.href = `/version/${versionId}/delete`;
+    }
+}
+
+function toggleStable(versionId) {
+    if (confirm('Вы уверены, что хотите изменить статус стабильности этой версии?')) {
+        fetch(`/version/${versionId}/toggle_stable`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert(data.error || 'Произошла ошибка');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Произошла ошибка при изменении статуса стабильности');
+        });
     }
 }
 </script>

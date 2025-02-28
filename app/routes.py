@@ -393,17 +393,21 @@ def add_flag(id):
     form = AddFlagForm()
     
     if form.validate_on_submit():
-        flag = VersionFlag(
-            version_id=version.id,
-            flag_type=form.flag_type.data,
-            description=form.description.data,
-            created_by=current_user
-        )
-        db.session.add(flag)
-        db.session.commit()
-        flash('Флаг добавлен')
+        try:
+            flag = VersionFlag(
+                version_id=version.id,
+                flag_type=form.flag_type.data,
+                description=form.description.data,
+                created_by=current_user
+            )
+            db.session.add(flag)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Флаг добавлен'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)})
     
-    return redirect(url_for('main.application_details', id=version.application_id))
+    return jsonify({'success': False, 'error': 'Неверные данные формы'})
 
 @main.route('/version/<int:id>/download')
 @login_required
